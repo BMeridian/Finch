@@ -1,0 +1,14 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true,  "name": "token",   "type": "address" },
+      { "indexed": true,  "name": "curve",   "type": "address" },
+      { "indexed": true,  "name": "creator", "type": "address" },
+      { "indexed": false, "name": "name",    "type": "string" },
+      { "indexed": false, "name": "symbol",  "type": "string" }
+    ],
+    "name": "TokenLaunched",
+    "type": "event"
+  }
+]
