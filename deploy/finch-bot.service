@@ -1,0 +1,17 @@
+[Unit]
+Description=Finch Telegram bot (@FinchRH_bot, long-polling)
+After=network-online.target finch-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/finch
+EnvironmentFile=/etc/finch/finch.env
+ExecStart=/usr/bin/npm run start:prod
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

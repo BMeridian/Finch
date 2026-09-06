@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-The repo currently contains only `DOC_prompt.md`, the full build spec. No code
-exists yet. `DOC_prompt.md` is the authoritative source for scope, contract
-addresses, the canonical demo fixture, and the locked demo-answer wording — read
-it before starting any work.
+Phase 1 done: subgraph live on Goldsky (`finch-rpc/0.4.0`, chain `robinhood-mainnet`;
+`SUBGRAPH_QUERY_URL` in `.env`). Bot + NLI + HTTP API built. Track B substreams
+module built, subgraph sink still open (Goldsky does not do substreams-powered
+subgraphs). `DOC_prompt.md` is the build spec — but the demo fixture, watch list,
+and answer wording in it have been superseded by later chat instructions
+(canonical wallet `0x2a58fb44…ed3`, 14-token watch list, terser bot answers).
 
 ## What Finch is
 
@@ -19,13 +21,23 @@ wallet's activity and new token launches. The subgraph-backed query API is also
 registered standalone in Bazantic; Finch is just one consumer of it, not a
 proxy other agents call through.
 
-## Planned structure
+## Structure
 
 ```
-/subgraph   - The Graph subgraph (schema.graphql, subgraph.yaml, mapping.ts)
-/bot        - Telegram bot + NLI query backend (LLM translates NL -> GraphQL -> NL answer)
-/bazantic   - Bazantic x402/MPP gateway config + Recipe
+/subgraph    - The Graph subgraph (schema, subgraph.yaml, AssemblyScript mappings)
+/substreams  - Track B: Substreams-powered subgraph (Pinax source) — sink still open
+/bot         - Telegram bot (@FinchRH_bot) + NLI backend + HTTP API
+  src/answer.ts    - answer() prose / answerJson() structured — shared extract+query
+  src/http.ts      - HTTP API (the endpoint Bazantic wraps): /query /health /calls /SKILL.md
+  src/calllog.ts   - every Gateway/agent call logged (in-memory ring + .calls.jsonl)
+  src/freshness.ts - subgraph head vs chain head staleness check (/health)
+/bazantic    - gateway.json (x402/MPP config) + DOC_recipe.md
+SKILL.md     - machine-readable manifest, also served at /SKILL.md
 ```
+
+Run: `cd bot && npm start` (Telegram) and `npm run serve` (HTTP API, port
+`FINCH_HTTP_PORT`, default 8787). The two are independent processes over the
+same `answer()`/`answerJson()` backend.
 
 ## Architecture notes that span multiple files
 

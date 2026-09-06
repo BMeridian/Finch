@@ -1,0 +1,6 @@
+{
+  "name": "finch",
+  "private": true,
+  "engines": { "node": "22.x" },
+  "scripts": { "start": "cd bot && npm run serve:prod" }
+}

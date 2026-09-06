@@ -1,0 +1,14 @@
+# /etc/caddy/Caddyfile
+# The hostname comes from the environment so no address is baked into the repo.
+# Set FINCH_HOSTNAME before starting caddy (systemd: in /etc/finch/finch.env, or
+# `sudo systemctl edit caddy` -> [Service] Environment=FINCH_HOSTNAME=...).
+# A free option with no domain purchase: <dash-separated-ipv4>.sslip.io
+# e.g.  export FINCH_HOSTNAME=203-0-113-5.sslip.io
+
+{$FINCH_HOSTNAME} {
+	encode zstd gzip
+	reverse_proxy localhost:8787
+	log {
+		output file /var/log/caddy/finch.log
+	}
+}
