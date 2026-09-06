@@ -1,14 +1,20 @@
 [
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true,  "name": "token",   "type": "address" },
-      { "indexed": true,  "name": "curve",   "type": "address" },
-      { "indexed": true,  "name": "creator", "type": "address" },
-      { "indexed": false, "name": "name",    "type": "string" },
-      { "indexed": false, "name": "symbol",  "type": "string" }
-    ],
-    "name": "TokenLaunched",
-    "type": "event"
-  }
+  { "anonymous": false, "type": "event", "name": "TokenLaunched", "inputs": [
+    { "indexed": true,  "name": "token",    "type": "address" },
+    { "indexed": true,  "name": "curve",    "type": "address" },
+    { "indexed": true,  "name": "deployer", "type": "address" },
+    { "indexed": false, "name": "pairToken","type": "address" },
+    { "indexed": false, "name": "launchConfigId",      "type": "uint256" },
+    { "indexed": false, "name": "graduationThreshold", "type": "uint256" }
+  ]},
+  { "anonymous": false, "type": "event", "name": "PoolGraduated", "inputs": [
+    { "indexed": true,  "name": "token",           "type": "address" },
+    { "indexed": false, "name": "positionId",      "type": "uint256" },
+    { "indexed": false, "name": "tokenAmount",     "type": "uint256" },
+    { "indexed": false, "name": "pairTokenAmount", "type": "uint256" }
+  ]},
+  { "anonymous": false, "type": "event", "name": "GraduationTokensPermanentlyLocked", "inputs": [
+    { "indexed": true,  "name": "token",  "type": "address" },
+    { "indexed": false, "name": "amount", "type": "uint256" }
+  ]}
 ]

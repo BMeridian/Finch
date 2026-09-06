@@ -29,8 +29,12 @@ dataSources:
         - name: PonsFactory
           file: ./abis/PonsFactory.json
       eventHandlers:
-        - event: TokenLaunched(indexed address,indexed address,indexed address,string,string)
+        - event: TokenLaunched(indexed address,indexed address,indexed address,address,uint256,uint256)
           handler: handleTokenLaunched
+        - event: PoolGraduated(indexed address,uint256,uint256,uint256)
+          handler: handlePoolGraduated
+        - event: GraduationTokensPermanentlyLocked(indexed address,uint256)
+          handler: handleGraduationTokensPermanentlyLocked
 
   - kind: ethereum
     name: PoolManager

@@ -9,9 +9,9 @@ type TokenLaunch @entity {
   launchpad: Launchpad!
   token: Bytes!
   curve: Bytes
-  creator: Bytes!
-  name: String
-  symbol: String
+  creator: Bytes!                 # the TokenLaunched `deployer`
+  pairToken: Bytes
+  graduationThreshold: BigInt
   block: BigInt!
   timestamp: BigInt!
   txHash: Bytes!
