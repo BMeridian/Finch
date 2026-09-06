@@ -1,0 +1,108 @@
+import { chat, llmAvailable } from "./llm.js"
+import { gql } from "./subgraph.js"
+import { human, tokenMeta, TOKENS, KNOWN_SYMBOLS } from "./tokens.js"
+import { candidatesFor } from "./candidates.js"
+import type { Parsed } from "./extract.js"
+import type { QueryResult, TransferRow, LaunchRow } from "./query.js"
+
+const FEE_ESCROW = "0xd3AFEB2a57f70eF218Aa82451c51B2fb0416Ac9e"
+const shortAddr = (h: string) => `${h.slice(0, 6)}...${h.slice(-4)}`
+const shortTx = (h: string) => `${h.slice(0, 10)}...${h.slice(-5)}`
+const isFeeSettlement = (r: TransferRow) => /fee claim|fee settlement|feeescrow/i.test(r.fromLabel ?? "")
+
+const TRACKED = KNOWN_SYMBOLS.join(", ")
+
+export async function format(p: Parsed, q: QueryResult): Promise<string> {
+  if (q.kind === "wallet") return formatWallet(p, q)
+  if (q.kind === "launches") return formatLaunches(q.launches)
+  if (q.kind === "graduated") return formatGraduated(q.launch)
+  return "I can answer: why a wallet received a token (give me the address), what launched on Pons recently, or whether a token has graduated (give me its address)."
+}
+
+async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" }>): Promise<string> {
+  if (q.transfers.length === 0) {
+    if (p.tokenSymbol) {
+      return q.walletIndexed
+        ? `That wallet hasn't received any ${p.tokenSymbol} in the indexed range.`
+        : `I don't see any ${p.tokenSymbol} received by that wallet in the indexed range.`
+    }
+    return q.walletIndexed
+      ? `That wallet is in the index but hasn't received any of the tracked tokens (${TRACKED}).`
+      : `I don't see any activity for that wallet in the indexed range (Pons launches + ${TRACKED} transfers). It may have received tokens outside that window or tokens Finch doesn't track.`
+  }
+
+  // Finch exists to explain classified transfers — surface the most recent
+  // labeled one if present, else the most recent transfer of any kind.
+  const r = q.transfers.find(isFeeSettlement)
+    ?? q.transfers.find(t => t.fromLabel)
+    ?? q.transfers[0]
+  const { symbol } = tokenMeta(r.token)
+  const amt = human(r.amount, r.token)
+
+  if (isFeeSettlement(r)) {
+    if (!p.wantsTrace) {
+      // Candidate list — the answer to "which token", shown compact, no hedging.
+      const cands = await candidatesFor(r.to, r.token).catch(() => [] as { symbol: string; address: string }[])
+      if (cands.length) {
+        const lines = cands.slice(0, 5).map(c => {
+          const label = c.symbol !== "tokens" ? c.symbol : "token"
+          return `  ${label}  ${c.address}`
+        })
+        return `You received ${amt} ${symbol} from a Pons fee settlement.\nThis could be from activity in:\n${lines.join("\n")}`
+      }
+      return `You received ${amt} ${symbol}. Where from: Pons fee settlement. Why: FeeEscrow ` +
+             `settles accrued trading-fee revenue from Pons-launched tokens.`
+    }
+
+    const { count } = await gql<{ count: { id: string }[] }>(
+      `query ($tx: Bytes!, $from: Bytes!) { count: transfers(where: { txHash: $tx, from: $from }, first: 1000) { id } }`,
+      { tx: r.txHash, from: r.from },
+    ).then(d => ({ count: d.count })).catch(() => ({ count: [] as { id: string }[] }))
+    const n = count.length || "many"
+    return `You received ${amt} ${symbol}. Where from: Pons fee settlement. Why: FeeEscrow ` +
+      `settles accrued trading-fee revenue from Pons-launched tokens.\n\n` +
+      `This was a batched payout — not a transfer or swap you initiated. A distributor ` +
+      `paid it to you along with many others in one transaction. This is the most recent ` +
+      `${symbol} transfer to this wallet.\n\n` +
+      `Tx: ${r.txHash}\n` +
+      `Route:\n` +
+      `  FeeEscrow    ${FEE_ESCROW.toLowerCase()}\n` +
+      `  distributor  ${r.from}\n` +
+      `  wallet       ${r.to}\n` +
+      `(1 of ${n} recipients paid in this same tx)`
+  }
+
+  // Non-canonical category — deterministic base; LLM only rephrases if configured.
+  const src = r.fromLabel ? r.fromLabel : "another wallet"
+  const base = `You received ${amt} ${symbol} from ${src}${p.wantsTrace ? `\n\nTx: ${r.txHash}\nFrom: ${r.from}` : ""}.`
+  if (!llmAvailable() || p.wantsTrace) return base
+  try {
+    return await chat(
+      "Rewrite the fact as one plain sentence for a non-technical user. Do not add advice, " +
+      "speculation, or any value not present. Keep the token amount and symbol exactly.",
+      base,
+    )
+  } catch { return base }
+}
+
+function formatLaunches(rows: LaunchRow[]): string {
+  if (rows.length === 0) return "No Pons launches in that window (in the indexed range)."
+  const lines = rows.slice(0, 8).map(l => {
+    const when = new Date(Number(l.timestamp) * 1000).toISOString().replace("T", " ").slice(0, 16)
+    const pair = l.pairToken
+      ? ` · paired vs ${TOKENS[l.pairToken.toLowerCase()]?.symbol ?? shortAddr(l.pairToken)}`
+      : ""
+    const grad = l.graduated ? " · graduated" : " · on curve"
+    return `• ${l.token}${pair}${grad} · ${when}Z`
+  })
+  return `Recent Pons launches:\n${lines.join("\n")}`
+}
+
+function formatGraduated(l: LaunchRow | null): string {
+  if (!l) return "I don't have a Pons launch record for that token in the indexed range."
+  if (!l.graduated) return `That token launched on Pons and is still on the bonding curve — not graduated.`
+  const when = l.graduationTimestamp
+    ? new Date(Number(l.graduationTimestamp) * 1000).toISOString().replace("T", " ").slice(0, 16) + "Z"
+    : "an unknown time"
+  return `Yes — that token graduated to a Uniswap V4 pool at ${when}.`
+}
