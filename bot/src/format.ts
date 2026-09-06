@@ -1,7 +1,8 @@
 import { chat, llmAvailable } from "./llm.js"
-import { gql } from "./subgraph.js"
+import { gql, gqlOn } from "./subgraph.js"
 import { human, tokenMeta, TOKENS, KNOWN_SYMBOLS } from "./tokens.js"
 import { candidatesFor } from "./candidates.js"
+import { PONS25 } from "./pons25.js"
 import type { Parsed } from "./extract.js"
 import type { QueryResult, TransferRow, LaunchRow } from "./query.js"
 
@@ -12,9 +13,18 @@ const isFeeSettlement = (r: TransferRow) => /fee claim|fee settlement|feeescrow/
 
 const TRACKED = KNOWN_SYMBOLS.join(", ")
 
+const P25_BY_ADDR = new Map(PONS25.map(r => [r.address.toLowerCase(), r.symbol]))
+function pairLabel(addr: string): string {
+  const a = addr.toLowerCase()
+  if (a === "0x0000000000000000000000000000000000000000") return "ETH"
+  if (a === "0x5fc5360d0400a0fd4f2af552add042d716f1d168") return "USDG"
+  if (a === "0x0bd7d308f8e1639fab988df18a8011f41eacad73") return "WETH"
+  return TOKENS[a]?.symbol ?? P25_BY_ADDR.get(a) ?? shortAddr(a)
+}
+
 export async function format(p: Parsed, q: QueryResult): Promise<string> {
   if (q.kind === "wallet") return formatWallet(p, q)
-  if (q.kind === "launches") return formatLaunches(q.launches)
+  if (q.kind === "launches") return formatLaunches(p, q.launches)
   if (q.kind === "graduated") return formatGraduated(q.launch)
   return "I can answer: why a wallet received a token (give me the address), what launched on Pons recently, or whether a token has graduated (give me its address)."
 }
@@ -54,7 +64,8 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
              `settles accrued trading-fee revenue from Pons-launched tokens.`
     }
 
-    const { count } = await gql<{ count: { id: string }[] }>(
+    // recipient count comes from whichever subgraph the payout was found in
+    const { count } = await gqlOn<{ count: { id: string }[] }>(q.via,
       `query ($tx: Bytes!, $from: Bytes!) { count: transfers(where: { txHash: $tx, from: $from }, first: 1000) { id } }`,
       { tx: r.txHash, from: r.from },
     ).then(d => ({ count: d.count })).catch(() => ({ count: [] as { id: string }[] }))
@@ -85,17 +96,27 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
   } catch { return base }
 }
 
-function formatLaunches(rows: LaunchRow[]): string {
-  if (rows.length === 0) return "No Pons launches in that window (in the indexed range)."
-  const lines = rows.slice(0, 8).map(l => {
-    const when = new Date(Number(l.timestamp) * 1000).toISOString().replace("T", " ").slice(0, 16)
-    const pair = l.pairToken
-      ? ` · paired vs ${TOKENS[l.pairToken.toLowerCase()]?.symbol ?? shortAddr(l.pairToken)}`
-      : ""
-    const grad = l.graduated ? " · graduated" : " · on curve"
-    return `• ${l.token}${pair}${grad} · ${when}Z`
+function formatLaunches(p: Parsed, rows: LaunchRow[]): string {
+  const pairScope = p.pairGroup === "pons25" ? " paired vs a Pons25 stock token"
+    : p.pairFilter ? ` paired vs ${pairLabel(p.pairFilter)}`
+    : ""
+  const noun = p.onlyGraduated ? "graduated Pons tokens (now on Uniswap V4)" : "recent Pons launches"
+  if (rows.length === 0) {
+    return (p.pairFilter || p.pairGroup || p.onlyGraduated)
+      ? `No ${noun}${pairScope} in the indexed range.`
+      : "No Pons launches in that window (in the indexed range)."
+  }
+  const lines = rows.slice(0, 10).map(l => {
+    const ts = Number(p.onlyGraduated ? (l.graduationTimestamp ?? l.timestamp) : l.timestamp)
+    const when = new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 16)
+    const pair = l.pairToken ? ` · vs ${pairLabel(l.pairToken)}` : ""
+    const stage = p.onlyGraduated ? "" : (l.graduated ? " · graduated" : " · on curve")
+    return `• ${l.token}${pair}${stage} · ${when}Z`
   })
-  return `Recent Pons launches:\n${lines.join("\n")}`
+  const hint = (p.pairFilter || p.pairGroup || p.onlyGraduated) ? "" :
+    "\n\nSend a token symbol or \"Pons25\" to filter by pairing token, or \"graduated\" for Uniswap V4 pools only."
+  const head = p.onlyGraduated ? `Graduated Pons tokens${pairScope} (now trading on Uniswap V4):` : `Recent Pons launches${pairScope}:`
+  return `${head}\n${lines.join("\n")}${hint}`
 }
 
 function formatGraduated(l: LaunchRow | null): string {

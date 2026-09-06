@@ -1,6 +1,8 @@
 import { Bot } from "grammy"
 import { answer } from "./answer.js"
-import { getWallet, setWallet, clearWallet } from "./session.js"
+import { getWallet, setWallet, clearWallet, getMode, setMode } from "./session.js"
+import { setSeeMode, seeMode, callStats } from "./calllog.js"
+import { freshness } from "./freshness.js"
 import { pons25Text } from "./pons25.js"
 import { finchTopText, coverageText } from "./lists.js"
 
@@ -17,7 +19,7 @@ const HELP =
   "   demo: /account 0x2a58fb44f78d7b600aec945ba8cb253896793ed3\n" +
   "2) send a token symbol (NVDA, SPY, GME, GOOGL, cbBTC, …) — or \"why did I get NVDA?\"\n\n" +
   "One-shot also works: paste an address + a symbol in one message. Also:\n" +
-  "• \"what launched on Pons recently\"\n" +
+  "• /launchesPons — recent Pons launches (then a symbol or \"Pons25\" filters by pairing token)\n" +
   "• paste a token address + \"has it graduated?\"\n" +
   "Add \"show the technical trace\" for addresses + tx.\n\n" +
   "Pons25 — top 25 tokenized stocks by on-chain market cap\n" +
@@ -40,8 +42,39 @@ bot.command("account", (ctx) => {
 
 bot.command(["forget", "clear"], (ctx) => { clearWallet(ctx.chat.id); return ctx.reply("Wallet cleared.") })
 
+bot.command(["health", "status"], async (ctx) => {
+  try {
+    const f = await freshness()
+    const s = callStats()
+    return ctx.reply(
+      `Subgraph: block ${f.subgraph_block} · chain ${f.chain_block}\n` +
+      `Lag: ${f.lag_blocks.toLocaleString()} blocks (~${Math.round(f.lag_seconds / 60)} min) · ${f.fresh ? "fresh" : "backfilling"}\n` +
+      `Agent calls: ${s.total} logged · logging ${seeMode()}`)
+  } catch (e) {
+    return ctx.reply(`Health check failed: ${e}`)
+  }
+})
+
 bot.command("pons25", (ctx) => ctx.reply(pons25Text(), { link_preview_options: { is_disabled: true } }))
 bot.command("finchtop", (ctx) => ctx.reply(finchTopText()))
+
+async function replyLaunches(ctx: any) {
+  setMode(ctx.chat.id, "launches")
+  await ctx.replyWithChatAction("typing")
+  const a = await answer("what launched on pons recently", undefined, "launches")
+  return ctx.reply(a, { link_preview_options: { is_disabled: true } })
+}
+bot.command(["launchespons", "launches", "pons", "recent"], replyLaunches)
+bot.command("graduated", async (ctx) => {
+  setMode(ctx.chat.id, "launches")
+  await ctx.replyWithChatAction("typing")
+  return ctx.reply(await answer("graduated pons tokens", undefined, "launches"), { link_preview_options: { is_disabled: true } })
+})
+
+// Call-visibility toggles (affect the HTTP API's agent-call log; shared via file).
+bot.command("seeagent",     (ctx) => { setSeeMode("min");  return ctx.reply("Agent call logging: min (timestamp + caller).") })
+bot.command("seeagentfull", (ctx) => { setSeeMode("full"); return ctx.reply("Agent call logging: full (wallet, question, latency, UA).") })
+bot.command("agentoff",     (ctx) => { setSeeMode("off");  return ctx.reply("Agent call logging: off.") })
 
 const PONS25_RE = /^\s*pons\s*25\s*$/i
 const FINCHTOP_RE = /^\s*finch\s*top\s*$/i
@@ -51,6 +84,13 @@ bot.on("message:text", async (ctx) => {
   const q = ctx.message.text
   console.log(`msg from @${ctx.from?.username ?? ctx.from?.id}: ${q}`)
 
+  // Call-log toggles — accept any casing, with or without the slash
+  // (Telegram commands are case-sensitive, so /agentOff misses bot.command).
+  const bt = q.trim().replace(/^\//, "")
+  if (/^seeagentfull$/i.test(bt)) { setSeeMode("full"); return ctx.reply("Agent call logging: full (wallet, question, latency, UA).") }
+  if (/^seeagent$/i.test(bt))     { setSeeMode("min");  return ctx.reply("Agent call logging: min (timestamp + caller).") }
+  if (/^agentoff$/i.test(bt))     { setSeeMode("off");  return ctx.reply("Agent call logging: off.") }
+
   // A message that is ONLY an address just sets the wallet — same as /account.
   const bare = q.trim()
   if (ADDR.test(bare)) {
@@ -59,12 +99,21 @@ bot.on("message:text", async (ctx) => {
   }
 
   if (COVERAGE_RE.test(q)) return ctx.reply(coverageText(), { link_preview_options: { is_disabled: true } })
-  if (PONS25_RE.test(q))   return ctx.reply(pons25Text(), { link_preview_options: { is_disabled: true } })
   if (FINCHTOP_RE.test(q)) return ctx.reply(finchTopText())
+  // bare "pons25" only shows the reference list when NOT in launches mode
+  if (PONS25_RE.test(q) && getMode(ctx.chat.id) !== "launches" && !/launch/i.test(q))
+    return ctx.reply(pons25Text(), { link_preview_options: { is_disabled: true } })
+
+  // short text form, any casing
+  if (/^\/?(launchespons|launches|recent launches)$/i.test(bare)) return replyLaunches(ctx)
+
+  // switch context: a launch-y ask puts the chat in "launches" mode so a
+  // follow-up bare symbol filters by pairing token.
+  if (/(launch|what.*pons|newly|just dropped|new (token|coin))/i.test(q)) setMode(ctx.chat.id, "launches")
 
   await ctx.replyWithChatAction("typing")
   try {
-    const a = await answer(q, getWallet(ctx.chat.id))
+    const a = await answer(q, getWallet(ctx.chat.id), getMode(ctx.chat.id))
     await ctx.reply(a, { link_preview_options: { is_disabled: true } })
     console.log("replied ok")
   } catch (e) {
