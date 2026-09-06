@@ -10,8 +10,8 @@ and returning correct, real data.
 A GraphQL query against the deployed subgraph, filtered to tx
 `0x022e94a3a3670b6f0dfdbfa50ffad5a6d48a970e39fc26915ea0b62e051b53b9`,
 returns a `Transfer` record showing:
-- `to`: `0x2a466c3edd210d59ee530c93c3fd8d1b819463e9`
-- `amount`: `0.004459` NVDA (raw uint256, adjust for decimals)
+- `to`: `0x2a58fb44f78d7b600aec945ba8cb253896793ed3`
+- `amount`: `0.007371` NVDA (raw `7370695524996258`, adjust for decimals)
 - `toLabel`: null or "you" (this is a plain wallet, no special label)
 - `fromLabel`: `"Pons fee claim contract"` (this is the distributor,
   `0xe25e9bc31d24bb652fb6e2e466d7c9c89701173e` — must resolve to this
@@ -63,17 +63,22 @@ Unverified — confirm each on Blockscout before hardcoding:
 
 ## Canonical demo case — verified, non-personal, use exactly this
 
-Wallet `0x2a466c3edd210d59ee530c93c3fd8d1b819463e9` received 0.004459 NVDA
-in tx `0x022e94a3…b53b9` — one of **100 recipients** paid in a single
-Multicall3 `aggregate3` transaction sent by the distributor contract
-(`0xe25e…173e`). This wallet took no action itself; it was a passive
-recipient of a batched payout. The distributor itself was funded by a
-separate, earlier claim against FeeEscrow (different tx, not needed for
-Phase 1).
+Wallet `0x2a58fb44f78d7b600aec945ba8cb253896793ed3` (a plain EOA) received
+0.007371 NVDA in tx `0x022e94a3…b53b9` — one of **100 recipients** paid in a
+single Multicall3 `aggregate3` transaction sent by the distributor contract
+(`0xe25e…173e`). The distributor itself was funded by a separate, earlier
+claim against FeeEscrow (different tx, not needed for Phase 1).
 
-Backup wallets, same tx, use if the primary has any issue when verified:
-- `0x2a58fb44f78d7b600aec945ba8cb253896793ed3` — 0.00737 NVDA
-- `0x2a888c0a8ec1853fffb74e72fb17bc401f7e751d` — 0.004775 NVDA
+This wallet is a **recurring** recipient: full on-chain history shows NVDA
+received 11× (~9.72 NVDA total), 10 of them from `0xe25e…173e`, back to
+block ~15.8M. The current subgraph (startBlock 53,480,000) already sees two:
+this tx and a later one at block 53,599,582 (`0xaa0ff1fb…`). That makes it a
+clean "standing fee entitlement" demo without widening the window.
+
+NEVER use a personal wallet as a fixture. This one is unclaimed and non-personal.
+
+Dead-end backup (do not use — single receipt only):
+`0x2a888c0a8ec1853fffb74e72fb17bc401f7e751d`
 
 **On Multicall3 — do not over-build this for Phase 1.** Each of the 100
 transfers inside that batch still emits its own normal ERC-20 `Transfer`

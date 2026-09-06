@@ -25,13 +25,17 @@ Distribution tx `0x022e94a3…b53b9` — **block 53,505,176**, one Multicall3
 ERC-20 `Transfer`, so a plain handler on the NVDA contract catches them with no
 Multicall3 decoding.
 
-Phase-1 target recipient (verified, non-personal):
+Phase-1 target recipient — **`0x2a58fb44f78d7b600aec945ba8cb253896793ed3`**
+(plain EOA, non-personal, unclaimed). Never use a personal wallet as a fixture.
 
 | Wallet | Amount (raw wei) | = NVDA |
 |---|---|---|
-| `0x2a466c3edd210d59ee530c93c3fd8d1b819463e9` | `4459483197045479` | 0.004459 |
-| `0x2a58fb44f78d7b600aec945ba8cb253896793ed3` (backup) | `7370695524996258` | 0.007371 |
-| `0x2a888c0a8ec1853fffb74e72fb17bc401f7e751d` (backup) | `4775667060679075` | 0.004776 |
+| `0x2a58fb44f78d7b600aec945ba8cb253896793ed3` | `7370695524996258` | 0.007371 |
+
+Recurring recipient: full history = NVDA received 11× (~9.72 total), 10 from
+`0xe25e…173e`. The subgraph already sees two — this tx and block 53,599,582
+(`0xaa0ff1fb…`). `0x2a888c0a8ec1853fffb74e72fb17bc401f7e751d` is a single-receipt
+dead end — do not use.
 
 The distributor was funded by an earlier separate claim against FeeEscrow
 (tx `0xb823345c…731055d`, block 53,489,627 — a 14-token settlement batch). **Not
@@ -41,36 +45,39 @@ needed for Phase 1.**
 
 ## What's indexed
 
-- `PonsV2Factory` — `TokenLaunched` (ABI is still a plausible guess; see below)
+- `PonsV2Factory` — `TokenLaunched` + graduation events (real ABI from source)
 - `PoolManager` — `Initialize` / `Swap` / `ModifyLiquidity`, filtered in-handler
   to the Meme Hook. `Pool.token` = the side that is NOT a known pairing asset
-  (zero addr, WETH, USDG, NVDA, AAPL, TSLA, AMZN); null + `log.warning` when
-  both/neither match (e.g. a graduated NVDA/WETH pool).
-- 6 stock tokens (NVDA, AAPL, TSLA, AMZN, WETH, USDG) — `Transfer` via one
-  shared `handleTransfer`, `from`/`to` tagged through `labelFor` (deterministic,
-  reused by Phase 2's NLI formatter).
+  (zero addr + every watched token in `constants.ts` `WATCHED`); null +
+  `log.warning` when both/neither match (e.g. a graduated NVDA/WETH pool).
+- **14 watched tokens** (`constants.ts` `WATCHED`): NVDA, AAPL, TSLA, AMZN, SPCX,
+  cbBTC, GLD, SPY, QQQ, DJT, GME, RDDT, GOOGL, RBLX. `Transfer` via one shared
+  `handleTransfer`, `from`/`to` tagged through `labelFor`.
+- **WETH + USDG** are NOT watched for Transfers but ARE pool pairing/quote assets
+  (`constants.ts` `PAIRING_EXTRA`) — needed so `Pool.token` derives the memecoin
+  side of a memecoin/WETH or memecoin/USDG pool.
 
-## Still open before Phase 1 is "done"
+## Phase 1 — DONE
 
-1. **Deploy target** — pick Pinax or Goldsky, authenticate, and confirm a deploy
-   actually works *before* more mapping changes. For Goldsky use the dashboard's
-   network typeahead; don't hardcode `robinhood-mainnet`.
-2. **Pons `TokenLaunched` ABI** — `abis/PonsFactory.json` is guessed. Pull the
-   real signature (verified source, or decode a known launch tx's logs) and
-   reconcile `subgraph.yaml` + `src/pons.ts`.
-3. **Run the success query** against the live endpoint and paste it back:
+- Deployed to **Goldsky** as `finch-rpc/0.2.0` (chain `robinhood-mainnet`).
+  Endpoint in `.env` `SUBGRAPH_QUERY_URL`. Goldsky supports Robinhood Chain for
+  RPC subgraphs; it does NOT support substreams-powered subgraphs (that's Track B).
+- Real Pons `TokenLaunched` ABI applied (from `ponsdotdev/ponsfamily`), plus
+  `PoolGraduated` / `GraduationTokensPermanentlyLocked` handlers.
+- Success query verified live:
 
 ```graphql
 {
   transfers(
     where: {
-      token: "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec"
       txHash: "0x022e94a3a3670b6f0dfdbfa50ffad5a6d48a970e39fc26915ea0b62e051b53b9"
-      to: "0x2a466c3edd210d59ee530c93c3fd8d1b819463e9"
+      to: "0x2a58fb44f78d7b600aec945ba8cb253896793ed3"
     }
   ) { from fromLabel to toLabel amount txHash block }
 }
 ```
+
+→ `amount 7370695524996258`, `fromLabel "Pons fee claim contract"`, `toLabel null`.
 
 Expect: one record, `fromLabel` = `"Pons fee claim contract"`, `toLabel` = null,
 `amount` = `4459483197045479`.

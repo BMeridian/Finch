@@ -39,6 +39,13 @@ proxy other agents call through.
   settlement (many tokens, many recipients) happens inside one multicall tx.
 - **The `Launchpad` entity is generalized on purpose** — do not hardcode "Pons".
   Pons is the primary worked example; Pools.trade is an optional second source.
+- **Token watch list** is defined in THREE places that must stay in sync:
+  `subgraph/src/constants.ts` `WATCHED`, `substreams/substreams.yaml`
+  `params.map_raw` `tokens=`, and `bot/src/tokens.ts`. 14 tokens currently
+  (NVDA/AAPL/TSLA/AMZN/SPCX/cbBTC/GLD/SPY/QQQ/DJT/GME/RDDT/GOOGL/RBLX).
+  WETH + USDG are NOT watched for Transfers but ARE pool pairing assets —
+  `constants.ts` `PAIRING_EXTRA` / substreams `pairing=` param.
+  Each watch-list change needs a subgraph data-source edit + redeploy.
 - **Distributor topology is an open investigation** (see DOC_prompt.md
   "Distributor topology"): confirm whether recipient contracts are an
   EIP-1167 clone/factory pattern before finalizing the schema. If confirmed,

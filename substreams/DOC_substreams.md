@@ -87,14 +87,15 @@ substreams run -e robinhood.substreams.pinax.network:443 substreams.yaml graph_o
 
 | field | value |
 |---|---|
-| to | `0x2a466c3edd210d59ee530c93c3fd8d1b819463e9` |
-| amount | `4459483197045479` (0.004459 NVDA) |
+| to | `0x2a58fb44f78d7b600aec945ba8cb253896793ed3` (canonical demo wallet — EOA, non-personal) |
+| amount | `7370695524996258` (0.007371 NVDA) |
 | fromLabel | `Pons fee claim contract` |
 | toLabel | `` (plain wallet — correct) |
 | txHash | `0x022e94a3…b53b9` |
 
 `map_raw` @ that block: 128 transfers (102 NVDA), 7 Meme-Hook swaps. This is the
-Step 5 result — but produced directly from the module, not yet through Goldsky.
+Step 5 result — but produced directly from the module, not yet through a subgraph
+sink (Goldsky does not support substreams-powered subgraphs; see below).
 
 > Same-block caveat: `map_events` filters Swap/ModifyLiquidity by the
 > `store_meme_pools` store, which only sees `Initialize` from *prior* blocks. A

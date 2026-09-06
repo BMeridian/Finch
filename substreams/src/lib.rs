@@ -31,6 +31,7 @@ fn parse_cfg(params: &str) -> Cfg {
     let mut factory = vec![]; let mut hook = vec![];
     let mut fee_escrow = vec![]; let mut distributor = vec![];
     let mut tokens = HashSet::new();
+    let mut pairing_extra: Vec<Vec<u8>> = vec![];
     for kv in params.split('&') {
         let mut it = kv.splitn(2, '=');
         match (it.next(), it.next()) {
@@ -39,13 +40,16 @@ fn parse_cfg(params: &str) -> Cfg {
             (Some("fee_escrow"), Some(v)) => fee_escrow = addr(v),
             (Some("distributor"), Some(v)) => distributor = addr(v),
             (Some("tokens"), Some(v)) => { for t in v.split(',') { tokens.insert(addr(t)); } }
+            (Some("pairing"), Some(v)) => { for t in v.split(',') { pairing_extra.push(addr(t)); } }
             _ => {}
         }
     }
-    // pairing assets = the watched tokens themselves + zero address; the launched
-    // side of a pool is whichever currency is NOT in here (null when ambiguous).
+    // pairing assets = watched tokens + explicit quote assets (WETH/USDG) + zero.
+    // The launched side of a pool is whichever currency is NOT in here (null when
+    // ambiguous). Quote assets need not be Transfer-watched to serve this role.
     let mut pairing = tokens.clone();
     pairing.insert(vec![0u8; 20]);
+    for p in pairing_extra { pairing.insert(p); }
     Cfg { factory, hook, fee_escrow, distributor, tokens, pairing }
 }
 

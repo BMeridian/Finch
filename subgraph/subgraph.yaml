@@ -97,13 +97,62 @@ dataSources:
     mapping: *erc20mapping
 
   - kind: ethereum
-    name: WETH
+    name: QQQ
     network: robinhood-mainnet
-    source: { address: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", abi: ERC20, startBlock: 53480000 }
+    source: { address: "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  # ---- Extended Robinhood token watch list (symbols from FeeEscrow settlement tx) ----
+  - kind: ethereum
+    name: SPCX
+    network: robinhood-mainnet
+    source: { address: "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea", abi: ERC20, startBlock: 53480000 }
     mapping: *erc20mapping
 
   - kind: ethereum
-    name: USDG
+    name: cbBTC
     network: robinhood-mainnet
-    source: { address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", abi: ERC20, startBlock: 53480000 }
+    source: { address: "0xcec185eb182c47d1ba1efc84e6959e18cd620be4", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  - kind: ethereum
+    name: GLD
+    network: robinhood-mainnet
+    source: { address: "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  - kind: ethereum
+    name: SPY
+    network: robinhood-mainnet
+    source: { address: "0x117cc2133c37b721f49de2a7a74833232b3b4c0c", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  - kind: ethereum
+    name: DJT
+    network: robinhood-mainnet
+    source: { address: "0x1d11f0496982706c5e14a514d4e79f2e6bde4516", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  - kind: ethereum
+    name: GME
+    network: robinhood-mainnet
+    source: { address: "0x1b0e319c6a659f002271b69db8a7df2f911c153e", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  - kind: ethereum
+    name: RDDT
+    network: robinhood-mainnet
+    source: { address: "0x05b37fb53a299a1b874a619e1c4c404d52c36f4c", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  - kind: ethereum
+    name: GOOGL
+    network: robinhood-mainnet
+    source: { address: "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3", abi: ERC20, startBlock: 53480000 }
+    mapping: *erc20mapping
+
+  - kind: ethereum
+    name: RBLX
+    network: robinhood-mainnet
+    source: { address: "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8", abi: ERC20, startBlock: 53480000 }
     mapping: *erc20mapping
