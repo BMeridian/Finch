@@ -1,0 +1,89 @@
+syntax = "proto3";
+package finch.v1;
+
+// One message per event (substreams-ethereum hard rule). uint256 -> decimal string.
+
+message TokenLaunch {
+  string token = 1;
+  string curve = 2;
+  string deployer = 3;
+  string pair_token = 4;
+  string launch_config_id = 5;
+  string graduation_threshold = 6;
+  uint64 block = 7;
+  uint64 timestamp = 8;
+  string tx_hash = 9;
+}
+
+message Graduation {
+  string token = 1;
+  string kind = 2;            // "PoolGraduated" | "GraduationTokensPermanentlyLocked" | "LaunchSwept"
+  string amount = 3;          // context-dependent uint256 as decimal string
+  uint64 block = 4;
+  uint64 timestamp = 5;
+  string tx_hash = 6;
+}
+
+message PoolInitialize {
+  string pool_id = 1;
+  string currency0 = 2;
+  string currency1 = 3;
+  string token = 4;           // launched side, "" when not derivable
+  string hook = 5;
+  uint32 fee = 6;
+  int32 tick_spacing = 7;
+  string sqrt_price_x96 = 8;
+  int32 tick = 9;
+  uint64 block = 10;
+  uint64 timestamp = 11;
+  string tx_hash = 12;
+}
+
+message PoolSwap {
+  string pool_id = 1;
+  string sender = 2;
+  string amount0 = 3;
+  string amount1 = 4;
+  string sqrt_price_x96 = 5;
+  string liquidity = 6;
+  int32 tick = 7;
+  uint32 fee = 8;
+  uint64 block = 9;
+  uint64 timestamp = 10;
+  string tx_hash = 11;
+  uint32 log_index = 12;
+}
+
+message PoolModifyLiquidity {
+  string pool_id = 1;
+  string sender = 2;
+  int32 tick_lower = 3;
+  int32 tick_upper = 4;
+  string liquidity_delta = 5;
+  uint64 block = 6;
+  uint64 timestamp = 7;
+  string tx_hash = 8;
+  uint32 log_index = 9;
+}
+
+message Transfer {
+  string token = 1;
+  string from = 2;
+  string to = 3;
+  string amount = 4;
+  string from_label = 5;
+  string to_label = 6;
+  uint64 block = 7;
+  uint64 timestamp = 8;
+  string tx_hash = 9;
+  uint32 log_index = 10;
+}
+
+message Events {
+  repeated TokenLaunch token_launches = 1;
+  repeated Graduation graduations = 2;
+  repeated PoolInitialize pool_initializes = 3;
+  repeated PoolSwap pool_swaps = 4;
+  repeated PoolModifyLiquidity pool_modify_liquidity = 5;
+  repeated Transfer transfers = 6;
+}
