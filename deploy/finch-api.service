@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=ec2-user
-WorkingDirectory=/opt/finch
+WorkingDirectory=/home/ec2-user/_Finch/bot
 EnvironmentFile=/etc/finch/finch.env
 ExecStart=/usr/bin/npm run serve:prod
 Restart=always

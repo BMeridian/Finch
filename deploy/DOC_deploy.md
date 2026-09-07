@@ -3,34 +3,27 @@
 Target: `ec2-user@YOUR_BOX_IP` (Amazon Linux 2023, Stockholm). Runtime footprint
 ~300 MB / near-zero CPU — fine on t3.micro.
 
-## 1. Sync the repo to /opt/finch
+## 1. Sync the repo to ~/_Finch
 
-The API needs only `bot/`, `SKILL.md`, `bazantic/`, `deploy/`. From this repo root:
+The box holds the full repo tree at `/home/ec2-user/_Finch/`. From this repo root
+(do NOT use `--delete` with a partial file list — it will wipe siblings):
 
 ```bash
-rsync -avz --delete \
-  --exclude 'bot/node_modules' \
-  --exclude 'bot/.session.json' --exclude 'bot/.calls.jsonl' --exclude 'bot/.seemode' \
-  --exclude 'subgraph' --exclude 'subgraph-live' --exclude 'substreams' \
-  --exclude '.git' --exclude '.env' \
+rsync -avz \
+  --exclude 'node_modules' \
+  --exclude '.session.json' --exclude '.calls.jsonl' --exclude '.seemode' \
+  --exclude '.git' --exclude '.env' --exclude '*.jpg' \
   -e "ssh -i YOUR_KEY.pem" \
-  bot SKILL.md bazantic deploy CLAUDE.md \
-  ec2-user@YOUR_BOX_IP:/tmp/finch-sync/
-
-# move into place (first time)
-ssh -i YOUR_KEY.pem ec2-user@YOUR_BOX_IP \
-  'sudo mkdir -p /opt/finch && sudo rsync -a /tmp/finch-sync/ /opt/finch/ && sudo chown -R ec2-user:ec2-user /opt/finch'
+  ./ ec2-user@YOUR_BOX_IP:/home/ec2-user/_Finch/
 ```
 
-(If you'd rather push straight to `/opt/finch`, rsync there directly — but the
-box's ec2-user needs write access to `/opt`, so the `/tmp` staging + `sudo rsync`
-avoids a permissions dance.)
+ec2-user owns its home dir, so this writes directly — no `/tmp` staging or `sudo`.
 
 ## 2. One-time setup on the box
 
 ```bash
 ssh -i YOUR_KEY.pem ec2-user@YOUR_BOX_IP
-sudo bash /opt/finch/deploy/setup.sh
+sudo bash /home/ec2-user/_Finch/deploy/setup.sh
 ```
 
 Installs Node 22 + Caddy, `npm ci` in `bot/`, writes `/etc/finch/finch.env`,
@@ -62,9 +55,9 @@ curl -s $BASE/calls | python3 -c 'import sys,json;print(json.load(sys.stdin)["st
 ## 5. Redeploy after code changes
 
 ```bash
-# re-run the rsync from step 1 (--delete keeps it clean), then:
+# re-run the rsync from step 1, then:
 ssh -i YOUR_KEY.pem ec2-user@YOUR_BOX_IP \
-  'cd /opt/finch/bot && npm ci --omit=dev && sudo systemctl restart finch-api finch-bot'
+  'cd /home/ec2-user/_Finch/bot && npm install --omit=dev && sudo systemctl restart finch-api finch-bot'
 ```
 
 ## 6. Then wire Bazantic

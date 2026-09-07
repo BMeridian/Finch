@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Finch deploy. Run on the box:  sudo bash /opt/finch/deploy/setup.sh
-# Repo (the bot/ contents + SKILL.md + bazantic/) must already be at /opt/finch.
+# Finch deploy. Run on the box:  sudo bash ~/_Finch/deploy/setup.sh
+# The full repo tree (bot/ subgraph/ bazantic/ deploy/ SKILL.md ...) must already
+# be at $REPO (default /home/ec2-user/_Finch). Override with REPO=/path sudo -E bash ...
 # Works on openSUSE (zypper) and Fedora/AL2023 (dnf).
 set -euo pipefail
 
-REPO=/opt/finch
-[ -f "$REPO/package.json" ] || { echo "expected the app at $REPO (bot/ contents at the root)"; exit 1; }
+REPO=${REPO:-/home/ec2-user/_Finch}
+APP="$REPO/bot"
+RUN_USER=${RUN_USER:-ec2-user}
+[ -f "$APP/package.json" ] || { echo "expected the app at $APP — set REPO= to the repo root"; exit 1; }
 
 if command -v zypper >/dev/null; then PKG="zypper -n install"; NODE_PKG="nodejs22 npm22 caddy"
 elif command -v dnf >/dev/null;   then PKG="dnf install -y";   NODE_PKG="caddy"; fi
@@ -22,13 +25,13 @@ node -v; caddy version
 echo "== env =="
 mkdir -p /etc/finch
 [ -f /etc/finch/finch.env ] || install -m 600 "$REPO/deploy/finch.env" /etc/finch/finch.env
-chown ec2-user:ec2-user /etc/finch/finch.env
-grep -q '^FINCH_SKILL_PATH='  /etc/finch/finch.env || echo 'FINCH_SKILL_PATH=/opt/finch/SKILL.md'          >> /etc/finch/finch.env
-grep -q '^FINCH_SPEC_PATH='   /etc/finch/finch.env || echo 'FINCH_SPEC_PATH=/opt/finch/bazantic/openapi.json' >> /etc/finch/finch.env
+chown "$RUN_USER:$RUN_USER" /etc/finch/finch.env
+grep -q '^FINCH_SKILL_PATH=' /etc/finch/finch.env || echo "FINCH_SKILL_PATH=$REPO/SKILL.md"           >> /etc/finch/finch.env
+grep -q '^FINCH_SPEC_PATH='  /etc/finch/finch.env || echo "FINCH_SPEC_PATH=$REPO/bazantic/openapi.json" >> /etc/finch/finch.env
 grep -q '^FINCH_HOSTNAME=.\+' /etc/finch/finch.env || echo "  !! set FINCH_HOSTNAME in /etc/finch/finch.env (e.g. <ip-dashed>.sslip.io) then re-run"
 
 echo "== deps =="
-( cd "$REPO" && sudo -u ec2-user npm ci --omit=dev )
+( cd "$APP" && sudo -u "$RUN_USER" npm ci --omit=dev )
 
 echo "== caddy =="
 mkdir -p /var/log/caddy
@@ -40,8 +43,14 @@ EnvironmentFile=/etc/finch/finch.env
 DROPIN
 
 echo "== services =="
-install -m 644 "$REPO/deploy/finch-api.service" /etc/systemd/system/finch-api.service
-install -m 644 "$REPO/deploy/finch-bot.service" /etc/systemd/system/finch-bot.service
+# WorkingDirectory in these units must match $APP — they ship pointing at
+# /home/ec2-user/_Finch/bot. If REPO/RUN_USER differ, they are rewritten here.
+for u in finch-api finch-bot; do
+  sed -e "s|^WorkingDirectory=.*|WorkingDirectory=$APP|" \
+      -e "s|^User=.*|User=$RUN_USER|" \
+      "$REPO/deploy/$u.service" > "/etc/systemd/system/$u.service"
+  chmod 644 "/etc/systemd/system/$u.service"
+done
 systemctl daemon-reload
 systemctl enable --now finch-api
 grep -q '^TELEGRAM_BOT_TOKEN=.\+' /etc/finch/finch.env && systemctl enable --now finch-bot || echo "  (finch-bot not started — no TELEGRAM_BOT_TOKEN)"
