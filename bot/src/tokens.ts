@@ -15,6 +15,7 @@ export const TOKENS: Record<string, { symbol: string; decimals: number }> = {
   "0x05b37fb53a299a1b874a619e1c4c404d52c36f4c": { symbol: "RDDT",  decimals: 18 },
   "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3": { symbol: "GOOGL", decimals: 18 },
   "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8": { symbol: "RBLX",  decimals: 18 },
+  "0x32ac8c1d7672667d5ebdea22935f7b06fc8d496f": { symbol: "HOOD",  decimals: 18 },
 }
 
 export function tokenMeta(addr: string) {

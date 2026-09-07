@@ -28,6 +28,7 @@ export let WATCHED: string[] = [
   "0x05b37fb53a299a1b874a619e1c4c404d52c36f4c", // RDDT
   "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3", // GOOGL
   "0xf0c4bf4c582cb3836e98394b1d4e7b7281101be8", // RBLX
+  "0x32ac8c1d7672667d5ebdea22935f7b06fc8d496f", // HOOD
 ]
 
 // Pool pairing/quote assets — NOT watched for Transfers, but still needed for
