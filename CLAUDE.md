@@ -4,12 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Phase 1 done: subgraph live on Goldsky (`finch-rpc/0.4.0`, chain `robinhood-mainnet`;
-`SUBGRAPH_QUERY_URL` in `.env`). Bot + NLI + HTTP API built. Track B substreams
-module built, subgraph sink still open (Goldsky does not do substreams-powered
-subgraphs). `DOC_prompt.md` is the build spec — but the demo fixture, watch list,
-and answer wording in it have been superseded by later chat instructions
-(canonical wallet `0x2a58fb44…ed3`, 14-token watch list, terser bot answers).
+Phase 1 done: subgraphs live on Goldsky. `SUBGRAPH_QUERY_URL` = history
+(`finch-rpc/0.4.0`, 14 tokens, ~59% synced); `finch-rpc/0.5.0` (15 tokens, adds
+HOOD) backfilling from scratch — cut `SUBGRAPH_QUERY_URL` to it once caught up.
+`SUBGRAPH_LIVE_URL` = `finch-live/0.2.0` (15 tokens incl HOOD, recent window).
+Goldsky project is at its 3-subgraph limit. Bot + NLI + HTTP API built. Track B
+substreams module built, subgraph sink still open (Goldsky does not do
+substreams-powered subgraphs). `DOC_prompt.md` is the build spec — but the demo
+fixture, watch list, and answer wording in it have been superseded by later chat
+instructions (canonical wallet `0x2a58fb44…ed3`, 15-token watch list, terser bot
+answers).
 
 ## What Finch is
 
@@ -53,8 +57,8 @@ same `answer()`/`answerJson()` backend.
   Pons is the primary worked example; Pools.trade is an optional second source.
 - **Token watch list** is defined in THREE places that must stay in sync:
   `subgraph/src/constants.ts` `WATCHED`, `substreams/substreams.yaml`
-  `params.map_raw` `tokens=`, and `bot/src/tokens.ts`. 14 tokens currently
-  (NVDA/AAPL/TSLA/AMZN/SPCX/cbBTC/GLD/SPY/QQQ/DJT/GME/RDDT/GOOGL/RBLX).
+  `params.map_raw` `tokens=`, and `bot/src/tokens.ts`. 15 tokens currently
+  (NVDA/AAPL/TSLA/AMZN/SPCX/cbBTC/GLD/SPY/QQQ/DJT/GME/RDDT/GOOGL/RBLX/HOOD).
   WETH + USDG are NOT watched for Transfers but ARE pool pairing assets —
   `constants.ts` `PAIRING_EXTRA` / substreams `pairing=` param.
   Each watch-list change needs a subgraph data-source edit + redeploy.

@@ -3,50 +3,151 @@
   "info": {
     "title": "Finch",
     "version": "0.1.0",
-    "description": "Read-only provenance and Pons launchpad data for Robinhood Chain (EVM 4663). Where a wallet's tokens came from; recent Pons launches; graduation status. No trading, scoring, or recommendations — every response carries confidence: 'signal only - not a recommendation'."
+    "description": "Read-only provenance and Pons launchpad data for Robinhood Chain (EVM 4663). Where a wallet's tokens came from; recent Pons launches; graduation status. Backed by a Goldsky-hosted subgraph indexing the Pons launch factory and the Uniswap V4 PoolManager. No trading, scoring, or recommendations - every response carries confidence: 'signal only - not a recommendation'."
   },
-  "servers": [{ "url": "https://REPLACE_WITH_DEPLOYED_URL" }],
+  "servers": [
+    {
+      "url": "https://REPLACE_WITH_DEPLOYED_URL"
+    }
+  ],
   "paths": {
     "/query": {
       "get": {
         "operationId": "finchQuery",
         "summary": "Ask Finch about a wallet, Pons launches, or a token's graduation",
         "parameters": [
-          { "name": "wallet", "in": "query", "required": false, "schema": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" }, "description": "wallet to look up (provenance)" },
-          { "name": "q", "in": "query", "required": false, "schema": { "type": "string" }, "description": "natural-language question; e.g. 'why did I get NVDA', 'recent SPY launches', 'has 0x… graduated'. Defaults to 'why did I get NVDA' when only a wallet is given." },
-          { "name": "format", "in": "query", "required": false, "schema": { "type": "string", "enum": ["json", "prose"], "default": "json" } }
+          {
+            "name": "wallet",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{40}$"
+            },
+            "description": "wallet to look up (provenance)"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "natural-language question; e.g. 'why did I get NVDA', 'recent SPY launches', 'has 0x\u2026 graduated'. Defaults to 'why did I get NVDA' when only a wallet is given."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "prose"
+              ],
+              "default": "json"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "answer", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Answer" } } } },
-          "502": { "description": "upstream/index error" }
+          "200": {
+            "description": "answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "upstream/index error"
+          }
         }
       },
       "post": {
         "operationId": "finchQueryPost",
         "summary": "Same as GET /query, body form",
-        "requestBody": { "required": false, "content": { "application/json": { "schema": {
-          "type": "object",
-          "properties": {
-            "wallet": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
-            "q": { "type": "string" },
-            "format": { "type": "string", "enum": ["json", "prose"], "default": "json" }
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "wallet": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$"
+                  },
+                  "q": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "prose"
+                    ],
+                    "default": "json"
+                  }
+                }
+              }
+            }
           }
-        } } } },
-        "responses": { "200": { "description": "answer", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Answer" } } } } }
+        },
+        "responses": {
+          "200": {
+            "description": "answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/health": {
       "get": {
         "operationId": "finchHealth",
         "summary": "Subgraph freshness vs chain head (live window gates 'fresh')",
-        "responses": { "200": { "description": "freshness", "content": { "application/json": { "schema": {
-          "type": "object",
-          "properties": {
-            "subgraph_block": { "type": "integer" }, "chain_block": { "type": "integer" },
-            "lag_blocks": { "type": "integer" }, "lag_seconds": { "type": "integer" }, "fresh": { "type": "boolean" },
-            "history_block": { "type": "integer" }, "history_lag_blocks": { "type": "integer" }
+        "responses": {
+          "200": {
+            "description": "freshness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "subgraph_block": {
+                      "type": "integer"
+                    },
+                    "chain_block": {
+                      "type": "integer"
+                    },
+                    "lag_blocks": {
+                      "type": "integer"
+                    },
+                    "lag_seconds": {
+                      "type": "integer"
+                    },
+                    "fresh": {
+                      "type": "boolean"
+                    },
+                    "history_block": {
+                      "type": "integer"
+                    },
+                    "history_lag_blocks": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
           }
-        } } } } }
+        }
       }
     }
   },
@@ -58,37 +159,146 @@
             "type": "object",
             "title": "WalletProvenance",
             "properties": {
-              "wallet": { "type": "string" },
-              "event": { "type": ["object", "null"], "properties": {
-                "token_received": { "type": "string" }, "amount": { "type": "string" }, "tx": { "type": "string" },
-                "source_label": { "type": ["string", "null"] }, "mechanism": { "type": "string" }
-              } },
-              "recurring": { "type": ["object", "null"], "properties": {
-                "count": { "type": "integer" }, "first_seen_block": { "type": "integer" }, "most_recent_block": { "type": "integer" }
-              } },
-              "candidate_tokens": { "type": "array", "items": { "type": "object", "properties": {
-                "symbol": { "type": "string" }, "address": { "type": "string" }, "confidence": { "type": "string", "const": "correlational only" }
-              } } },
-              "caveat": { "type": ["string", "null"] },
-              "data_source": { "type": "string" },
-              "confidence": { "type": "string", "const": "signal only - not a recommendation" }
+              "wallet": {
+                "type": "string"
+              },
+              "event": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "token_received": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "string"
+                  },
+                  "tx": {
+                    "type": "string"
+                  },
+                  "source_label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "mechanism": {
+                    "type": "string"
+                  }
+                }
+              },
+              "recurring": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  },
+                  "first_seen_block": {
+                    "type": "integer"
+                  },
+                  "most_recent_block": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "candidate_tokens": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "type": "string",
+                      "const": "correlational only"
+                    }
+                  }
+                }
+              },
+              "caveat": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "data_source": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "const": "signal only - not a recommendation"
+              }
             }
           },
           {
             "type": "object",
             "title": "PonsLaunches",
             "properties": {
-              "query": { "type": "string", "const": "pons_launches" },
-              "pair_filter": { "type": ["string", "null"] },
-              "launches": { "type": "array", "items": { "type": "object", "properties": {
-                "token": { "type": "string" }, "pair_token": { "type": ["string", "null"] }, "creator": { "type": "string" },
-                "graduated": { "type": "boolean" }, "launched_at": { "type": "integer" }, "tx": { "type": "string" }
-              } } },
-              "data_source": { "type": "string" },
-              "confidence": { "type": "string", "const": "signal only - not a recommendation" }
+              "query": {
+                "type": "string",
+                "const": "pons_launches"
+              },
+              "pair_filter": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "launches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "pair_token": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "creator": {
+                      "type": "string"
+                    },
+                    "graduated": {
+                      "type": "boolean"
+                    },
+                    "launched_at": {
+                      "type": "integer"
+                    },
+                    "tx": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "data_source": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "const": "signal only - not a recommendation"
+              }
             }
           },
-          { "type": "object", "title": "Prose", "properties": { "answer": { "type": "string" } } }
+          {
+            "type": "object",
+            "title": "Prose",
+            "properties": {
+              "answer": {
+                "type": "string"
+              }
+            }
+          }
         ]
       }
     }

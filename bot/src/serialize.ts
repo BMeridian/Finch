@@ -11,9 +11,11 @@ import type { QueryResult, TransferRow } from "./query.js"
 
 const CONFIDENCE = "signal only - not a recommendation"
 const CAVEAT =
-  "Candidate tokens reflect trading-history overlap with NVDA-paired pools; no LP " +
-  "or deployer activity found linking this wallet to them. Not a confirmed causal mechanism."
-const DATA_SOURCE = "Goldsky-hosted subgraph (Graph protocol), Robinhood Chain 4663"
+  "Candidate tokens reflect trading-history overlap with Uniswap V4 pools paired against the " +
+  "received token; no LP or deployer activity found linking this wallet to them. Not a confirmed " +
+  "causal mechanism. The true source may be absent entirely — a project can fund payouts from a " +
+  "treasury that buys the asset, with no pool pairing it against the received token."
+const DATA_SOURCE = "Goldsky-hosted subgraph indexing the Pons launch factory + Uniswap V4 PoolManager, Robinhood Chain 4663"
 
 const isFeeSettlement = (r: TransferRow) => /fee claim|fee settlement|feeescrow/i.test(r.fromLabel ?? "")
 

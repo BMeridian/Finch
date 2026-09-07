@@ -2,7 +2,9 @@
 
 **What it does:** answers factual questions about where a Robinhood Chain
 (EVM chain 4663) wallet's tokens came from, and about Pons launchpad activity.
-Backed by a Goldsky-hosted subgraph (The Graph protocol). Read-only. No trading,
+Backed by a subgraph (The Graph's schema + AssemblyScript mappings) hosted on
+Goldsky, indexing the Pons launch factory, the Uniswap V4 PoolManager (pools
+behind Pons's Meme Hook), and stock-token transfers. Read-only. No trading,
 scoring, or recommendations — data only.
 
 ## When to call Finch
@@ -41,7 +43,7 @@ call log: `GET /seeAgent` (min — timestamp + caller), `GET /seeAgentFull`
   "recurring": { "count": 2, "first_seen_block": 53505176, "most_recent_block": 53599582 },
   "candidate_tokens": [ { "symbol": "AI", "address": "0x…", "confidence": "correlational only" } ],
   "caveat": "Candidate tokens reflect trading-history overlap … Not a confirmed causal mechanism.",
-  "data_source": "Goldsky-hosted subgraph (Graph protocol), Robinhood Chain 4663",
+  "data_source": "Goldsky-hosted subgraph indexing the Pons launch factory + Uniswap V4 PoolManager, Robinhood Chain 4663",
   "confidence": "signal only - not a recommendation"
 }
 ```

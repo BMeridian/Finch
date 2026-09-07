@@ -25,8 +25,9 @@ server.tool(
   "finch_wallet_provenance",
   "Ask Finch where a Robinhood Chain (EVM 4663) wallet's tokens came from — fee " +
   "settlement, batched payout, recurring entitlement — plus correlational candidate " +
-  "tokens. Read-only data; every response carries confidence: 'signal only - not a " +
-  "recommendation'. Finch supplies data, you decide.",
+  "tokens. Backed by a Goldsky-hosted subgraph (Pons launch factory + Uniswap V4 " +
+  "PoolManager + token transfers). Read-only data; every response carries confidence: " +
+  "'signal only - not a recommendation'. Finch supplies data, you decide.",
   {
     wallet: z.string().regex(/^0x[0-9a-fA-F]{40}$/).describe("wallet address to look up"),
     question: z.string().optional().describe("natural-language question; defaults to 'why did I get NVDA'"),
@@ -53,7 +54,7 @@ server.tool(
 
 server.tool(
   "finch_health",
-  "Check Finch's subgraph freshness (indexed block vs chain head).",
+  "Check Finch's subgraph freshness — indexed block vs chain head.",
   {},
   async () => {
     const res = await fetch(`${BASE}/health`, { headers: { "x-agent-id": "mcp" } })

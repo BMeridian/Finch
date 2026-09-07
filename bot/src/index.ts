@@ -12,20 +12,72 @@ if (!token) { console.error("TELEGRAM_BOT_TOKEN missing (expected in ../.env)");
 const bot = new Bot(token)
 const ADDR = /^0x[0-9a-fA-F]{40}$/
 
-const HELP =
-  "Finch traces where Robinhood Chain tokens came from.\n\n" +
-  "Two-step:\n" +
-  "1) /account 0x…   set your wallet once\n" +
-  "   demo: /account 0x2a58fb44f78d7b600aec945ba8cb253896793ed3\n" +
-  "2) send a token symbol (NVDA, SPY, GME, GOOGL, cbBTC, …) — or \"why did I get NVDA?\"\n\n" +
-  "One-shot also works: paste an address + a symbol in one message. Also:\n" +
-  "• /launchesPons — recent Pons launches (then a symbol or \"Pons25\" filters by pairing token)\n" +
-  "• paste a token address + \"has it graduated?\"\n" +
-  "Add \"show the technical trace\" for addresses + tx.\n\n" +
-  "Pons25 — top 25 tokenized stocks by on-chain market cap\n" +
-  "FinchTop — the tokens Finch actually tracks"
+const HELP = [
+  "Finch — where your Robinhood Chain tokens came from.",
+  "A subgraph indexing Pons launches + Uniswap V4 pool activity (Goldsky-hosted).",
+  "",
+  "① SET YOUR WALLET (once)",
+  "   /account 0x…",
+  "   try it:  /account 0x2a58fb44f78d7b600aec945ba8cb253896793ed3",
+  "",
+  "② ASK",
+  "   NVDA                     ← just the symbol",
+  "   why did I get NVDA?",
+  "   trace NVDA               ← adds the address + tx route",
+  "   (one-shot: paste an address and a symbol together)",
+  "",
+  "PONS LAUNCHES",
+  "   /launchesPons            recent launches",
+  "   then:  NVDA  or  Pons25  filter by pairing token",
+  "   then:  graduated         only tokens now on a Uniswap V4 pool",
+  "   <token address> graduated?   check one token",
+  "",
+  "LISTS",
+  "   /pons25     top 25 tokenized stocks by on-chain market cap",
+  "   /finchtop   the tokens Finch tracks for transfers",
+  "",
+  "/health   index freshness    ·    /forget   clear your wallet",
+  "/process  how Finch works out an answer, and what it can miss",
+].join("\n")
+
+const PROCESS = [
+  "How Finch answers \"why did I get <token>?\"",
+  "",
+  "1. FIND THE TRANSFER",
+  "   The most recent transfer of that token into your wallet, from Finch's",
+  "   subgraph (live window first, deep history as fallback).",
+  "",
+  "2. CLASSIFY THE SENDER",
+  "   Known infra addresses (FeeEscrow, a Pons fee distributor, the launch",
+  "   factory, the Uniswap V4 PoolManager) are labelled from a fixed list. A",
+  "   payout from a distributor is called a \"Pons fee settlement\"; anything",
+  "   else is just a transfer from another wallet.",
+  "",
+  "3. NAME A CONFIRMED SOURCE (when possible)",
+  "   If the sender is a per-token fee distributor, Finch reads its on-chain",
+  "   token() / quoteToken() and names that token outright — e.g. \"your share",
+  "   of <token> fees, paid in <asset>\".",
+  "",
+  "4. OTHERWISE, LIST CANDIDATES (correlational, not proof)",
+  "   Tokens your wallet holds or has touched that ALSO have a Uniswap V4",
+  "   pool paired against the token you received. These are \"could be\",",
+  "   never \"because of\".",
+  "",
+  "WHAT THIS MISSES",
+  "• The source token may not be in the list at all. A project can collect",
+  "  fees in ETH, have its treasury buy <token> on the market, and airdrop",
+  "  it to holders — with no pool ever pairing that project against <token>.",
+  "• Off-chain / other-rollup treasuries (e.g. a perp position on Lighter)",
+  "  are invisible to Finch.",
+  "• Non-Pons launchpads (lunch.fun, etc.) are not yet indexed.",
+  "• The deep-history subgraph is still backfilling, so older activity may",
+  "  be incomplete — see /health.",
+  "",
+  "Finch does data retrieval only — no signals, scores, or buy/sell calls.",
+].join("\n")
 
 bot.command(["start", "help"], (ctx) => ctx.reply(HELP))
+bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { link_preview_options: { is_disabled: true } }))
 bot.command("ping", (ctx) => ctx.reply("pong"))
 
 bot.command("account", (ctx) => {
@@ -47,8 +99,9 @@ bot.command(["health", "status"], async (ctx) => {
     const f = await freshness()
     const s = callStats()
     return ctx.reply(
-      `Subgraph: block ${f.subgraph_block} · chain ${f.chain_block}\n` +
+      `Subgraph (Goldsky-hosted): block ${f.subgraph_block} · chain ${f.chain_block}\n` +
       `Lag: ${f.lag_blocks.toLocaleString()} blocks (~${Math.round(f.lag_seconds / 60)} min) · ${f.fresh ? "fresh" : "backfilling"}\n` +
+      `Indexing: Pons launch factory + Uniswap V4 PoolManager + stock-token transfers\n` +
       `Agent calls: ${s.total} logged · logging ${seeMode()}`)
   } catch (e) {
     return ctx.reply(`Health check failed: ${e}`)
@@ -98,6 +151,7 @@ bot.on("message:text", async (ctx) => {
     return ctx.reply(`Wallet set to ${bare.toLowerCase()}.\nNow send a token symbol (NVDA, SPY, GME, …) or "why did I get NVDA?"`)
   }
 
+  if (/^\/?(process|method|methodology|how it works)$/i.test(bare)) return ctx.reply(PROCESS, { link_preview_options: { is_disabled: true } })
   if (COVERAGE_RE.test(q)) return ctx.reply(coverageText(), { link_preview_options: { is_disabled: true } })
   if (FINCHTOP_RE.test(q)) return ctx.reply(finchTopText())
   // bare "pons25" only shows the reference list when NOT in launches mode

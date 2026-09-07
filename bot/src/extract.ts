@@ -63,6 +63,10 @@ export async function extract(text: string, savedWallet?: string, mode: Mode = "
   else if (launchWords && !/\bwhy\b/i.test(t) && !addrs.length) intent = "launches"
   else if (addrs.length && /(why|receiv|got|sent me|where.*from|airdrop|claim|dust)/i.test(t)) intent = "wallet"
   else if (addrs.length) intent = "wallet"
+  // A saved wallet + a bare known symbol (no launch/graduated/pons25/window words)
+  // is the two-step provenance flow ("/account" then "NVDA") — it wins over a
+  // stale "launches" mode so the chat is never trapped there.
+  else if (savedWallet && symbol && !launchWords && !graduatedWord && !pons25 && !sinceHours) intent = "wallet"
   else if (mode === "launches" && (symbol || pons25 || graduatedWord)) intent = "launches"   // launches-mode follow-up
   else if (savedWallet && (selfRef || symbol || wantsTrace || /(why|receiv|got|where.*from|airdrop|claim|dust|which token|what token|caused this|where.*came from)/i.test(t))) intent = "wallet"
   else if (launchWords || pons25) intent = "launches"
