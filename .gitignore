@@ -2,3 +2,11 @@
 .env.local
 node_modules/
 .DS_Store
+
+# stray screenshots / images dropped in the tree
+*.jpg
+*.jpeg
+*.png
+
+# local-only ops notes — box IP, key path, gateway slugs. never commit.
+*.local.md
