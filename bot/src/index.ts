@@ -77,8 +77,7 @@ const PROCESS = [
   "• Off-chain / other-rollup treasuries are invisible to Finch.",
   "• Non-Pons launchpads (lunch.fun, etc.) are not yet indexed.",
   "",
-  "Data retrieval only — no signals, scores, or buy/sell calls.",
-  "The Graph subgraph + Uniswap V4 pool data; callable by agents via Bazantic.",
+  "The Graph subgraph + on-chain contract reads + Uniswap V4 pool data; callable by agents via Bazantic.",
 ].join("\n")
 
 const AGENTS = [
