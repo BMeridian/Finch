@@ -1,7 +1,7 @@
 import { gql, gqlOn } from "./subgraph.js"
 import { human, tokenMeta } from "./tokens.js"
 import { candidatesFor } from "./candidates.js"
-import { resolveDistributors, describeMany, verifyProRata } from "./distributor.js"
+import { resolveDistributors } from "./distributor.js"
 import type { Parsed } from "./extract.js"
 import type { QueryResult, TransferRow } from "./query.js"
 
@@ -80,34 +80,33 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
   const resolved = await resolveDistributors(payers, r.token, p.wallet).catch(() => [])
   const c = resolved.find(x => x.distributor === D.toLowerCase()) ?? resolved[0]
 
-  // batch of this same tx from D → pro-rata test
+  // recipients of this same tx from D
   const batch = await gqlOn<{ t: { to: string; amount: string }[] }>(q.via,
     `query ($tx: Bytes!, $from: Bytes!) { t: transfers(where: { txHash: $tx, from: $from }, first: 1000) { to amount } }`,
     { tx: r.txHash, from: D },
   ).then(d => d.t).catch(() => [] as { to: string; amount: string }[])
 
-  let pr = null as Awaited<ReturnType<typeof verifyProRata>> | null
-  if (c && c.quoteToken === r.token && batch.length >= 3) {
-    pr = await verifyProRata(c.token, p.wallet,
-      batch.map(b => ({ addr: b.to, amount: BigInt(b.amount) }))).catch(() => null)
-  }
-
   const corr = (await candidatesFor(r.to, r.token).catch(() => [] as { symbol: string; address: string }[]))
     .filter(x => !c || x.address.toLowerCase() !== c.token)
-  const cdescs = corr.length ? await describeMany(corr.map(x => x.address)).catch(() => new Map<string, string>()) : new Map<string, string>()
 
-  const mechanism = pr?.proRata && c ? {
-    type: "pro_rata_holder_distribution",
+  // Path is confirmed when D's quoteToken() is the asset it paid — D distributes
+  // the fee currency of c.token's Uniswap V4 pool. Route only; recipient
+  // selection each epoch is claim-gated and D's logic contract is unverified.
+  const onPath = !!(c && c.quoteToken === r.token)
+  const path = onPath && c ? {
+    type: "v4_pool_fee_distribution",
     distributes: symbol,
-    to_holders_of: { symbol: c.symbol, address: c.token, description: c.description || null },
-    rate_per_million: Number(pr.perMillion!.toFixed(6)),
-    rate_unit: `${symbol} per 1,000,000 ${c.symbol} per round`,
-    wallet_holds: pr.walletBalance ? human(pr.walletBalance, c.token) : null,
-    verified_across_recipients: pr.samples,
-    payer_contract: D,
+    fee_pool_token: { symbol: c.symbol, address: c.token, description: c.description || null },
+    route: [
+      `${c.symbol} Uniswap V4 pool (Pons Meme Hook) — swap fees accrue in ${symbol}`,
+      `Pons FeeEscrow 0xd3AFEB2a57f70eF218Aa82451c51B2fb0416Ac9e`,
+      `distributor ${D} (beacon proxy; token()=${c.symbol}, quoteToken()=${symbol}${c.epochs ? `, epochCount()=${c.epochs}` : ""})`,
+      `epoch batch → this wallet + ${batch.length || "many"} others`,
+    ],
+    epoch_count: c.epochs ?? null,
+    distributor_functions: c.functions,
     references_v4_pool_manager: c.refsPoolManager,
-    contract_holds_distributed_asset: c.distributorHolds ? human(c.distributorHolds, r.token) : null,
-    confidence: "on-chain confirmed — received÷held is flat across sampled recipients in this tx",
+    recipient_selection: "not on-chain-readable — claim-gated, per epoch; distributor logic contract is unverified source",
   } : null
 
   return {
@@ -125,17 +124,16 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
       first_seen_block: blocks[0] ?? parseInt(r.block, 10),
       most_recent_block: blocks[blocks.length - 1] ?? parseInt(r.block, 10),
     },
-    mechanism,
-    candidates: mechanism ? [] : corr.map(x => ({
+    path,
+    candidates: path ? [] : corr.map(x => ({
       symbol: x.symbol, address: x.address,
-      description: cdescs.get(x.address.toLowerCase()) ?? null,
       basis: `${symbol}-paired Uniswap V4 pool; this wallet has transferred it`,
       confidence: "correlational only",
     })),
-    note: mechanism
-      ? "Mechanism verified on-chain: the payer distributes the received asset pro-rata to holders of the named token."
-      : `Contract ${D}${c ? ` has token()=${c.symbol}, quoteToken()=${symbol}` : ""} but the payouts in this tx are not pro-rata to holdings. Why this wallet is a recipient is not on-chain-readable. Candidates below are correlational only.`,
-    data_source: DATA_SOURCE + " + on-chain reads (token/quoteToken/balanceOf)",
+    note: path
+      ? "Route confirmed on-chain: the payer distributes the received asset, which is the fee currency of the named token's Uniswap V4 pool. Why this wallet is in this epoch's batch is not on-chain-readable."
+      : `Contract ${D}${c ? ` has token()=${c.symbol}, quoteToken()=${c.quoteToken}` : ""}; its quoteToken() is not ${symbol}, so the fee-pool path can't be confirmed. Why this wallet is a recipient is not on-chain-readable. Candidates below are correlational only.`,
+    data_source: DATA_SOURCE + " + on-chain reads (token/quoteToken/epochCount)",
     confidence: CONFIDENCE,
   }
 }

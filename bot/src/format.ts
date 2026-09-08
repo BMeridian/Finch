@@ -2,7 +2,7 @@ import { chat, llmAvailable } from "./llm.js"
 import { gql, gqlLive, gqlOn } from "./subgraph.js"
 import { human, tokenMeta, TOKENS, KNOWN_SYMBOLS } from "./tokens.js"
 import { candidatesFor } from "./candidates.js"
-import { resolveDistributors, describeMany, verifyProRata, txCall } from "./distributor.js"
+import { resolveDistributors, txCall } from "./distributor.js"
 import { PONS25 } from "./pons25.js"
 import type { Parsed } from "./extract.js"
 import type { QueryResult, TransferRow, LaunchRow } from "./query.js"
@@ -14,14 +14,6 @@ const shortTx = (h: string) => `${h.slice(0, 10)}...${h.slice(-5)}`
 // answers render with Telegram parse_mode "HTML" — escape any dynamic text
 // (launcher-controlled descriptions especially) and bold only via <b>.
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-// human-readable big token balance: "24.3M", "1,240", "0.42"
-const compact = (raw: string, addr: string) => {
-  const n = Number(human(raw, addr, 4))
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return Math.round(n).toLocaleString("en-US")
-  return String(n)
-}
 const isFeeSettlement = (r: TransferRow) => /fee claim|fee settlement|feeescrow/i.test(r.fromLabel ?? "")
 
 const TRACKED = KNOWN_SYMBOLS.join(", ")
@@ -118,7 +110,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     const resolved = await resolveDistributors(payers, r.token, r.to).catch(() => [])
     const c = resolved.find(x => x.distributor === D.toLowerCase()) ?? resolved[0]
 
-    // recipients + amounts paid by D in THIS tx — used to test pro-rata
+    // recipients paid by D in THIS tx — the epoch batch this wallet was in
     const batch = await gqlOn<{ t: { to: string; amount: string }[] }>(q.via,
       `query ($tx: Bytes!, $from: Bytes!) {
         t: transfers(where: { txHash: $tx, from: $from }, first: 1000) { to amount }
@@ -135,43 +127,38 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     const recN = recTx.length
     const recStr = `${recN}× in the indexed range`
 
-    // The pro-rata check reads *current* balances. If it PASSES, that's proof
-    // regardless of age. If it FAILS on an old payout, recipients have likely
-    // just traded since — so we soften the "not pro-rata" wording for old txs.
     const ageSec = Math.max(0, Math.floor(Date.now() / 1000) - Number(r.timestamp))
     const stale = ageSec > 24 * 3600
 
-    // is D distributing `symbol` pro-rata to holders of some token T?
-    // (c.token is D's token() getter; verify it against the batch.)
-    let pr = null as Awaited<ReturnType<typeof verifyProRata>> | null
-    if (c && c.quoteToken === r.token && batch.length >= 3) {
-      pr = await verifyProRata(c.token, r.to,
-        batch.map(b => ({ addr: b.to, amount: BigInt(b.amount) }))).catch(() => null)
-    }
-    const heldT = pr?.walletBalance && pr.walletBalance !== "0"
-      ? compact(pr.walletBalance, c!.token) : null
+    // Path is confirmed when D's quoteToken() is the asset it paid in — i.e. D
+    // distributes the fee currency of c.token's pool. We report the route only,
+    // not a per-holder rate: recipient selection each epoch is a claim-gated
+    // subset and the distributor's logic contract is unverified source.
+    const onPath = !!(c && c.quoteToken === r.token)
+    const fns = c && c.functions.length
+      ? [...new Set(c.functions.map(f => f.split("(")[0] + "()"))].join(", ")
+      : ""
 
-    // correlational candidates (only surfaced when we have no confirmed mechanism)
+    // correlational candidates (only surfaced when the path can't be confirmed)
     const cands = (await candidatesFor(r.to, r.token).catch(() => [] as { symbol: string; address: string }[]))
       .filter(x => !c || x.address.toLowerCase() !== c.token)
 
     // ---- non-trace ----
     if (!p.wantsTrace) {
-      if (pr?.proRata && c) {
-        return `This wallet received ${amt} ${symbol} — its pro-rata share of ${esc(c.symbol)} fee ` +
-          `distributions${heldT ? `, from holding ${heldT} ${esc(c.symbol)}` : ""}.\n\n` +
-          `Contract ${shortAddr(D)} pays ${symbol} to ${esc(c.symbol)} holders each round, ` +
-          `~${pr.perMillion!.toFixed(4)} ${symbol} per 1M ${esc(c.symbol)} ` +
-          `(verified across ${pr.samples} recipients in this tx). ` +
-          `Received ${recStr} from it.\n\nSend "trace" for the full route.`
+      if (onPath && c) {
+        return `This wallet received ${amt} ${symbol} from ${shortAddr(D)}, 1 of ${n} recipients in one tx.\n\n` +
+          `That contract distributes ${symbol} tied to ${esc(c.symbol)}'s Uniswap V4 pool ` +
+          `(pool fees accrue in ${symbol}), in per-epoch batches` +
+          (c.epochs ? ` (${c.epochs} so far)` : "") + `. ` +
+          `Received ${recStr}.\n\nSend "trace" for the path.`
       }
       const tk = c ? ` (its token() returns ${esc(c.symbol)})` : ""
       const why = stale
         ? `\n\nThis payout is from ${tsET(r.timestamp)} — Finch indexes from ~Sep 3, so earlier receipts aren't shown.`
         : cands.length
-          ? `\n\nNot pro-rata to current ${c ? esc(c.symbol) : symbol} holdings. ${symbol}-paired tokens this wallet has touched: ` +
+          ? `\n\n${symbol}-paired tokens this wallet has touched: ` +
             cands.slice(0, 5).map(x => esc(x.symbol)).join(", ") + `.`
-          : `\n\nNot pro-rata to current holdings; why this wallet is a recipient isn't on-chain-readable.`
+          : `\n\nWhy this wallet is a recipient isn't on-chain-readable.`
       return `This wallet received ${amt} ${symbol} from contract ${shortAddr(D)}${tk}, ` +
         `1 of ${n} recipients in tx ${shortTx(r.txHash)}.${recN > 1 ? ` Received ${recStr} from it.` : ""}${why}` +
         `\n\nSend "trace" for the route.`
@@ -185,38 +172,32 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
       : ""
 
     let body: string
-    if (pr?.proRata && c) {
-      // sample rows: wallet + up to 3 co-recipients, with held/received
-      const sampleRows = batch
-        .filter(b => b.to.toLowerCase() !== r.to.toLowerCase())
-        .slice(0, 3)
-      const lines = [
-        `  ${shortAddr(r.to)}  got ${amt} ${symbol}${heldT ? `  ·  holds ${heldT} ${esc(c.symbol)}` : ""}`,
-        ...sampleRows.map(b => `  ${shortAddr(b.to)}  got ${human(b.amount, r.token)} ${symbol}`),
-      ].join("\n")
+    if (onPath && c) {
       body =
-        `<b>MECHANISM</b> — ${esc(c.symbol)} pays ${symbol} to holders, pro-rata\n\n` +
-        `  ${via}${shortAddr(D)}  (contract with token()=${esc(c.symbol)}, quoteToken()=${symbol})\n` +
+        `<b>PATH</b>\n\n` +
+        `  ${esc(c.symbol)} Uniswap V4 pool (behind the Pons Meme Hook)\n` +
+        `    swap fees accrue in ${symbol}\n` +
+        `  → Pons FeeEscrow  ${FEE_ESCROW}\n` +
+        `  → ${shortAddr(D)}  distributor  (beacon proxy; token()=${esc(c.symbol)}, quoteToken()=${symbol}` +
+        (c.epochs ? `, epochCount()=${c.epochs}` : "") + `)\n` +
+        (fns ? `    exposes ${fns} — claim-gated, per epoch\n` : "") +
         (c.refsPoolManager
-          ? `    its logic references the Uniswap V4 PoolManager (${shortAddr(POOL_MANAGER)}) — where ${esc(c.symbol)}'s pool fees accrue in ${symbol}\n`
+          ? `    logic references the Uniswap V4 PoolManager (${shortAddr(POOL_MANAGER)})\n`
           : "") +
-        `    → ${symbol} to ${n} ${esc(c.symbol)} holders this round\n` +
-        `    rate: ~${pr.perMillion!.toFixed(4)} ${symbol} per 1M ${esc(c.symbol)} · verified across ${pr.samples} recipients\n` +
-        `    contract holds ${c.distributorHolds ? human(c.distributorHolds, r.token, 2) : "0"} ${symbol}` +
-        (c.functions.length ? ` · exposes ${[...new Set(c.functions.map(f => f.split("(")[0] + "()"))].join(", ")}` : "") + `\n\n` +
-        lines + `\n\n` +
+        `  → ${via}this wallet + ${n} others, one epoch batch\n\n` +
+        `Which addresses are in a given epoch's batch is not on-chain-readable ` +
+        `(the distributor's logic contract is unverified source).\n\n` +
         (c.description ? `${esc(c.symbol)} About (on-chain, immutable): "${esc(c.description)}"\n\n` : "") +
         `Recurring — ${recStr}` + (recTx.length ? `, first at block ${parseInt(recTx[0].block, 10)}` : "") + `.`
     } else {
       const list = cands.slice(0, 5).map(x => `  ${esc(x.symbol)}  ${x.address}`).join("\n")
       const reason = stale
         ? `This payout is from ${tsET(r.timestamp)} — Finch indexes from ~Sep 3, so any earlier receipts aren't shown.`
-        : `Payouts in this tx are not pro-rata to current ${c ? esc(c.symbol) : "token"} holdings` +
-          (pr ? ` (checked ${pr.samples} recipients)` : "") +
-          `. Why this wallet is a recipient is not on-chain-readable.`
+        : `The payer's quoteToken() is not ${symbol}, so the fee-pool path can't be confirmed. ` +
+          `Why this wallet is a recipient is not on-chain-readable.`
       body =
         `<b>NOT CONFIRMED</b>\n\n` +
-        `Contract ${D}${c ? ` has token()=${esc(c.symbol)}, quoteToken()=${symbol}` : ""}. ${reason}\n\n` +
+        `Contract ${D}${c ? ` has token()=${esc(c.symbol)}, quoteToken()=${esc(pairLabel(c.quoteToken))}` : ""}. ${reason}\n\n` +
         (cands.length ? `${symbol}-paired tokens this wallet has touched (correlation only):\n${list}\n\n` : "") +
         `Recurring — ${recStr}.`
     }

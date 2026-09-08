@@ -183,8 +183,9 @@
                       "null"
                     ]
                   },
-                  "mechanism": {
-                    "type": "string"
+                  "path": {
+                    "type": ["object", "null"],
+                    "description": "Confirmed route when the payer's quoteToken() is the received asset: fee currency of the named token's Uniswap V4 pool → Pons FeeEscrow → distributor → epoch batch. Recipient selection per epoch is not on-chain-readable."
                   }
                 }
               },
