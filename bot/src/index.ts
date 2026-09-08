@@ -271,9 +271,25 @@ bot.on("message:text", async (ctx) => {
 
 bot.catch((err) => console.error("bot error:", err))
 
+const MENU = [
+  { command: "start", description: "Reset and show the intro" },
+  { command: "account", description: "Set your wallet: /account 0x…" },
+  { command: "forget", description: "Clear the saved wallet" },
+  { command: "launches", description: "Recent Pons launches (add a symbol to filter)" },
+  { command: "grads", description: "Graduated tokens on Uniswap V4 (add a symbol)" },
+  { command: "finchtop", description: "The tokens Finch tracks" },
+  { command: "pons25", description: "The Pons25 basket" },
+  { command: "health", description: "Subgraph freshness vs chain head" },
+  { command: "process", description: "How Finch answers “why did I get this token?”" },
+  { command: "foragents", description: "HTTP API / MCP / Bazantic access" },
+  { command: "seeagent", description: "Live feed of agent calls (on)" },
+  { command: "agentoff", description: "Turn the agent-call feed off" },
+]
+
 async function main() {
   const me = await bot.api.getMe()
   console.log(`@${me.username} starting (long-polling)…`)
+  await bot.api.setMyCommands(MENU).catch(e => console.error("setMyCommands failed:", e))
   await bot.start({
     onStart: (i) => console.log(`polling as @${i.username}, id ${i.id}`),
     drop_pending_updates: true,

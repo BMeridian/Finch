@@ -58,16 +58,17 @@ export function callLogSize(): number {
   try { return statSync(FILE).size } catch { return 0 }
 }
 export function tailCalls(offset: number): { records: CallRecord[]; offset: number } {
-  let text = ""
-  try { text = readFileSync(FILE, "utf8") } catch { return { records: [], offset } }
-  if (offset > text.length) offset = 0          // file rotated/truncated
-  const slice = text.slice(offset)
+  let buf: Buffer
+  try { buf = readFileSync(FILE) } catch { return { records: [], offset } }
+  if (offset > buf.length) offset = 0           // file rotated/truncated
+  const slice = buf.subarray(offset).toString("utf8")
   const lastNl = slice.lastIndexOf("\n")
   if (lastNl < 0) return { records: [], offset }
+  const consumed = Buffer.byteLength(slice.slice(0, lastNl + 1), "utf8")
   const records = slice.slice(0, lastNl).split("\n").filter(Boolean)
     .map(l => { try { return JSON.parse(l) as CallRecord } catch { return null } })
     .filter((r): r is CallRecord => r !== null)
-  return { records, offset: offset + lastNl + 1 }
+  return { records, offset: offset + consumed }
 }
 
 export function callStats() {
