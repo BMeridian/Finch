@@ -52,7 +52,7 @@ const PROCESS = [
   "How Finch answers \"why did I get this token?\"",
   "",
   "THE PROBLEM",
-  "On Robinhood Chain, wallets keep receiving tokenized stocks — NVDA, COST, GLD — they never bought.",
+  "On Robinhood Chain, wallets receive tokenized stocks — NVDA, COST, GLD — they never bought.",
   "",
   "Here's how it happens. Someone launches a memecoin on Pons. It graduates to a Uniswap V4 pool paired against a stock. The creator redirects their fee cut — paid in that stock — to a holder-fee distributor. The distributor pays it out to a rotating set of holders each epoch.",
   "",
