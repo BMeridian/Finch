@@ -54,7 +54,7 @@ const PROCESS = [
   "THE PROBLEM",
   "On Robinhood Chain, wallets receive tokenized stocks — NVDA, COST, GLD — they never bought.",
   "",
-  "Here's how it happens. Someone launches a memecoin on Pons. It graduates to a Uniswap V4 pool paired against a stock. The creator redirects their fee cut — paid in that stock — to a holder-fee distributor. The distributor pays it out to a rotating set of holders each epoch.",
+  "Here's how it happens. Someone launches a memecoin on Pons. It graduates to a Uniswap V4 pool paired against a stock. The creator redirects their fee cut — paid in that stock — to a holder-fee distributor. The distributor pays it out to holders.",
   "",
   "Your wallet just sees \"+0.09 NVDA from 0xe25e…\". No block explorer tells you which memecoin that came from, or why you. Finch reconstructs the route.",
   "",
