@@ -92,7 +92,7 @@ const AGENTS = [
   "3. Bazantic gateway (x402/MPP, metered)",
   "Wraps the /query endpoint above.",
   "",
-  "Every response carries confidence: \"signal only - not a recommendation\". Candidate tokens are correlational, never causal — and the true source can be absent entirely (treasury buys the asset and airdrops it). Only Pons is indexed; deep history is still backfilling (see /health).",
+  "Every response carries confidence: \"signal only - not a recommendation\". Candidate tokens are correlational, never causal — and the true source can be absent entirely (treasury buys the asset and airdrops it). Only Pons is indexed; for status see /health.",
   "",
   "Full manifest: {BASE}/SKILL.md",
 ].join("\n")
