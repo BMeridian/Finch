@@ -6,14 +6,22 @@ agents then discover and call Finch through Bazantic without holding a Finch key
 Finch is a **peer, not a gatekeeper** — the same endpoint is open for direct
 calls, and the Telegram bot / MCP server are other consumers of it.
 
+`<BASE>` below = Finch's deployed https URL (`FINCH_PUBLIC_URL` in `.env`; the
+live value and the registered gateway slug are in `DOC_box.local.md`).
+
+## Status: registered and active
+
+The gateway is live and metering (`--auth-type x402-mpp`, price set per call).
+Nothing more is needed to demo. The steps below are the reproduction recipe.
+
 ## Register (two operator steps)
 
-Prereqs done: `npm i -g @bazantic/cli` (installed), `bazantic/openapi.json`
-written and served by `bot/src/http.ts` at `/spec`.
+Prereqs: `npm i -g @bazantic/cli`, `bazantic/openapi.json` written and served by
+`bot/src/http.ts` at `/spec`.
 
-Still needs a human:
+Needs a human:
 
-1. **Deploy `bot/src/http.ts` to a public https URL** — see `bot/DOC_deploy.md`.
+1. **Deploy `bot/src/http.ts` to a public https URL** — see `deploy/DOC_deploy.md`.
    Its `/spec` route then serves the OpenAPI doc with the real server URL filled
    in.
 
@@ -25,8 +33,8 @@ Then:
 
 ```bash
 baz gateway add \
-  --spec-url  https://<deployed>/spec \
-  --endpoint  https://<deployed> \
+  --spec-url  <BASE>/spec \
+  --endpoint  <BASE> \
   --name      "Finch" \
   --auth-type x402-mpp \
   --status    draft \
@@ -39,18 +47,39 @@ baz gateway add \
 CLI offers it but the gateway has no jwt branch and silently drops the service.)
 
 Finish in the dashboard wizard (`/gateways/new`, ANALYZE → REVIEW → ACTIVATE):
-set per-method price on `finchQuery`, then activate.
+set the per-call price on `finchQuery`, then activate.
 
 ## What agents get
 
 - `baz gateway list --json` → `endpointUrl`; calls are `{endpointUrl}/query?wallet=0x…`
 - Free discovery: `POST {endpointUrl}/mcp` `tools/list`, or probe a path for a `402`
-- Paid call: `baz curl {endpointUrl}/query?wallet=0x2a58fb44f78d7b600aec945ba8cb253896793ed3 --max-amount 0.02 --yes --json`
-- Bazantic forwards the paying agent's identity; Finch logs it at `GET {endpointUrl}/calls`
+- Paid call:
+  ```bash
+  baz curl "{endpointUrl}/query?wallet=0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0&q=why+NVDA" \
+    --max-amount 0.02 --yes --json
+  ```
+- Bazantic forwards the paying agent's identity; Finch logs it at
+  `GET {endpointUrl}/calls` (and streams it to Telegram when `/seeAgent` is on)
+
+## What a `/query` answer contains
+
+- `event` — the most recent classified transfer of that token to the wallet:
+  amount, tx, `received_at` / `age_seconds`, `paid_by_contract`, recipient count
+- `path` — present when the payer's `quoteToken()` is the received asset: the
+  confirmed route (fee currency of a token's Uniswap V4 pool → Pons FeeEscrow →
+  distributor → epoch batch). `recipient_selection` is stated as **not
+  on-chain-readable** — epoch-batch membership is claim-gated and the
+  distributor's logic contract is unverified source.
+- `candidates` — only when `path` is null: correlational only, explicit caveat
+- `confidence` — fixed string `"signal only - not a recommendation"` on every
+  response
+
+Answers age: `age_seconds` grows, and a newer distribution to the wallet
+replaces the surfaced event.
 
 ## When NOT to call Finch
 
-Buy/sell signals or scores — Finch never produces these. Parent-token fee
-attribution to certainty — Finch gives correlational candidates with an explicit
-caveat, never a confirmed cause. `confidence` is a fixed string on every
-response; the calling agent owns the decision.
+Buy/sell signals or scores — Finch never produces these. A confirmed *cause* for
+why a specific wallet is in an epoch batch — Finch reports the token's route and
+says plainly that the selection is off-chain. `confidence` is a fixed string on
+every response; the calling agent owns the decision.
