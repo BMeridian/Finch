@@ -52,7 +52,7 @@ const ago = (t?: string) => {
   if (h >= 1) return `${h}h ${m % 60}m ago`
   return `${m}m ago`
 }
-const when = (t?: string) => `${ago(t)}  ·  ${tsET(t)}`
+const when = (t?: string) => `<b>${ago(t)}</b>  ·  ${tsET(t)}`
 
 // The span the subgraphs actually cover, as timestamps — for "nothing found" replies.
 async function indexedRange(): Promise<string> {
@@ -158,7 +158,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     // ---- non-trace ----
     if (!p.wantsTrace) {
       if (onPath && c) {
-        return `This wallet received ${amt} ${symbol} from ${shortAddr(D)} ${ago(r.timestamp)}, 1 of ${n} recipients in that tx.\n\n` +
+        return `This wallet received ${amt} ${symbol} from ${shortAddr(D)} <b>${ago(r.timestamp)}</b>, 1 of ${n} recipients in that tx.\n\n` +
           `That contract distributes ${symbol} tied to ${esc(c.symbol)}'s Uniswap V4 pool ` +
           `(pool fees accrue in ${symbol}), in per-epoch batches` +
           (c.epochs ? ` (${c.epochs} so far)` : "") + `. ` +
@@ -171,7 +171,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
           ? `\n\n${symbol}-paired tokens this wallet has touched: ` +
             cands.slice(0, 5).map(x => esc(x.symbol)).join(", ") + `.`
           : `\n\nWhy this wallet is a recipient isn't on-chain-readable.`
-      return `This wallet received ${amt} ${symbol} from contract ${shortAddr(D)}${tk} ${ago(r.timestamp)}, ` +
+      return `This wallet received ${amt} ${symbol} from contract ${shortAddr(D)}${tk} <b>${ago(r.timestamp)}</b>, ` +
         `1 of ${n} recipients in tx ${shortTx(r.txHash)}.${recN > 1 ? ` Received ${recStr} from it.` : ""}${why}` +
         `\n\nSend "trace" for the route.`
     }
