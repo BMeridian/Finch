@@ -51,6 +51,9 @@ const HELP = [
 const PROCESS = [
   "How Finch answers \"why did I get this token?\"",
   "",
+  "THE PROBLEM",
+  "On Robinhood Chain, wallets keep receiving tokenized stocks — NVDA, COST, GLD — they never bought. Someone launches a memecoin on Pons, it graduates to a Uniswap V4 pool paired against a stock, the pool's swap fees accrue in that stock, and a distributor contract sprays them to a rotating set of holders. Your wallet just sees \"+0.09 NVDA from 0xe25e…\". No block explorer tells you which memecoin's pool that came from, or why you. Finch reconstructs the route.",
+  "",
   "1. FIND THE TRANSFER",
   "The most recent transfer of that token into your wallet — from The Graph subgraph (live window first, deep history as fallback).",
   "",
@@ -68,7 +71,6 @@ const PROCESS = [
   "• A project can fund payouts by buying the asset with its treasury, with no pool ever pairing it against that asset — invisible to this method.",
   "• Off-chain / other-rollup treasuries are invisible to Finch.",
   "• Non-Pons launchpads (lunch.fun, etc.) are not yet indexed.",
-  "• The deep-history subgraph is still backfilling — see /health.",
   "",
   "Data retrieval only — no signals, scores, or buy/sell calls.",
   "The Graph subgraph + Uniswap V4 pool data; callable by agents via Bazantic.",
