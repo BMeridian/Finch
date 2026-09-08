@@ -158,9 +158,12 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     // ---- non-trace ----
     if (!p.wantsTrace) {
       if (onPath && c) {
+        const kind = c.managerRegistered
+          ? `the Pons holder-fee distributor for ${esc(c.symbol)}`
+          : `a per-token fee distributor (token()=${esc(c.symbol)})`
         return `This wallet received ${amt} ${symbol} from ${shortAddr(D)} <b>${ago(r.timestamp)}</b>, 1 of ${n} recipients in that tx.\n\n` +
-          `That contract distributes ${symbol} tied to ${esc(c.symbol)}'s Uniswap V4 pool ` +
-          `(pool fees accrue in ${symbol}), in per-epoch batches` +
+          `${shortAddr(D)} is ${kind}. ${esc(c.symbol)}'s creator-fee cut is taken in ${symbol} ` +
+          `(its Uniswap V4 pool is paired against ${symbol}) and paid out in per-epoch batches` +
           (c.epochs ? ` (${c.epochs} so far)` : "") + `. ` +
           `Received ${recStr}.\n\nSend "trace" for the path.`
       }
@@ -185,20 +188,24 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
 
     let body: string
     if (onPath && c) {
+      const distLabel = c.managerRegistered
+        ? `Pons holder-fee distributor for ${esc(c.symbol)}  (PonsHolderFeeManager.distributorOf(${esc(c.symbol)}) == this)`
+        : `per-token fee distributor  (token()=${esc(c.symbol)}, quoteToken()=${symbol})`
       body =
         `<b>PATH</b>\n\n` +
-        `  ${esc(c.symbol)} Uniswap V4 pool (behind the Pons Meme Hook)\n` +
-        `    swap fees accrue in ${symbol}\n` +
+        `  ${esc(c.symbol)} / ${symbol} Uniswap V4 pool (behind the Pons Meme Hook)\n` +
+        `    ${esc(c.symbol)}'s creator-fee cut is taken in ${symbol}\n` +
         `  → Pons FeeEscrow  ${FEE_ESCROW}\n` +
-        `  → ${shortAddr(D)}  distributor  (beacon proxy; token()=${esc(c.symbol)}, quoteToken()=${symbol}` +
-        (c.epochs ? `, epochCount()=${c.epochs}` : "") + `)\n` +
+        `  → ${shortAddr(D)}\n` +
+        `    ${distLabel}\n` +
+        (c.epochs ? `    epochCount()=${c.epochs}\n` : "") +
         (fns ? `    exposes ${fns} — claim-gated, per epoch\n` : "") +
         (c.refsPoolManager
           ? `    logic references the Uniswap V4 PoolManager (${shortAddr(POOL_MANAGER)})\n`
           : "") +
         `  → ${via}this wallet + ${n} others, one epoch batch\n\n` +
         `Which addresses are in a given epoch's batch is not on-chain-readable ` +
-        `(the distributor's logic contract is unverified source).\n\n` +
+        `(the distributor's distribution logic is unverified source).\n\n` +
         (c.description ? `${esc(c.symbol)} About (on-chain, immutable): "${esc(c.description)}"\n\n` : "") +
         `Recurring — ${recStr}` + (recTx.length ? `, first at block ${parseInt(recTx[0].block, 10)}` : "") + `.`
     } else {

@@ -94,19 +94,22 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
   // selection each epoch is claim-gated and D's logic contract is unverified.
   const onPath = !!(c && c.quoteToken === r.token)
   const path = onPath && c ? {
-    type: "v4_pool_fee_distribution",
+    type: "pons_holder_fee_distribution",
     distributes: symbol,
     fee_pool_token: { symbol: c.symbol, address: c.token, description: c.description || null },
+    distributor_registered_in_manager: c.managerRegistered,
     route: [
-      `${c.symbol} Uniswap V4 pool (Pons Meme Hook) — swap fees accrue in ${symbol}`,
+      `${c.symbol} / ${symbol} Uniswap V4 pool (Pons Meme Hook) — ${c.symbol}'s creator-fee cut is taken in ${symbol}`,
       `Pons FeeEscrow 0xd3AFEB2a57f70eF218Aa82451c51B2fb0416Ac9e`,
-      `distributor ${D} (beacon proxy; token()=${c.symbol}, quoteToken()=${symbol}${c.epochs ? `, epochCount()=${c.epochs}` : ""})`,
+      c.managerRegistered
+        ? `Pons holder-fee distributor ${D} (PonsHolderFeeManager.distributorOf(${c.symbol}) == this; quoteToken()=${symbol}${c.epochs ? `, epochCount()=${c.epochs}` : ""})`
+        : `per-token fee distributor ${D} (token()=${c.symbol}, quoteToken()=${symbol}${c.epochs ? `, epochCount()=${c.epochs}` : ""})`,
       `epoch batch → this wallet + ${batch.length || "many"} others`,
     ],
     epoch_count: c.epochs ?? null,
     distributor_functions: c.functions,
     references_v4_pool_manager: c.refsPoolManager,
-    recipient_selection: "not on-chain-readable — claim-gated, per epoch; distributor logic contract is unverified source",
+    recipient_selection: "not on-chain-readable — claim-gated, per epoch; distributor's distribution logic is unverified source",
   } : null
 
   return {
