@@ -42,6 +42,18 @@ const tsET = (t?: string) => {
   })
 }
 
+// "3h 12m ago", "8m ago", "just now" — recomputed every call, so answers age.
+const ago = (t?: string) => {
+  if (!t) return "?"
+  const s = Math.max(0, Math.floor(Date.now() / 1000) - Number(t))
+  if (s < 90) return "just now"
+  const m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24)
+  if (d >= 1) return `${d}d ${h % 24}h ago`
+  if (h >= 1) return `${h}h ${m % 60}m ago`
+  return `${m}m ago`
+}
+const when = (t?: string) => `${ago(t)}  ·  ${tsET(t)}`
+
 // The span the subgraphs actually cover, as timestamps — for "nothing found" replies.
 async function indexedRange(): Promise<string> {
   const oldest = "{ t: transfers(first: 1, orderBy: block, orderDirection: asc) { timestamp } }"
@@ -146,7 +158,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     // ---- non-trace ----
     if (!p.wantsTrace) {
       if (onPath && c) {
-        return `This wallet received ${amt} ${symbol} from ${shortAddr(D)}, 1 of ${n} recipients in one tx.\n\n` +
+        return `This wallet received ${amt} ${symbol} from ${shortAddr(D)} ${ago(r.timestamp)}, 1 of ${n} recipients in that tx.\n\n` +
           `That contract distributes ${symbol} tied to ${esc(c.symbol)}'s Uniswap V4 pool ` +
           `(pool fees accrue in ${symbol}), in per-epoch batches` +
           (c.epochs ? ` (${c.epochs} so far)` : "") + `. ` +
@@ -159,7 +171,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
           ? `\n\n${symbol}-paired tokens this wallet has touched: ` +
             cands.slice(0, 5).map(x => esc(x.symbol)).join(", ") + `.`
           : `\n\nWhy this wallet is a recipient isn't on-chain-readable.`
-      return `This wallet received ${amt} ${symbol} from contract ${shortAddr(D)}${tk}, ` +
+      return `This wallet received ${amt} ${symbol} from contract ${shortAddr(D)}${tk} ${ago(r.timestamp)}, ` +
         `1 of ${n} recipients in tx ${shortTx(r.txHash)}.${recN > 1 ? ` Received ${recStr} from it.` : ""}${why}` +
         `\n\nSend "trace" for the route.`
     }
@@ -204,6 +216,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
 
     return `<b>FACT</b>\n` +
       `  ${amt} ${symbol} received — 1 of ${n} recipients in one tx\n` +
+      `  when  ${when(r.timestamp)}\n` +
       `  from  ${D}\n` +
       `  tx    ${r.txHash}\n\n` +
       body + `\n\n` +
