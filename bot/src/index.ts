@@ -67,7 +67,7 @@ const PROCESS = [
   "Which addresses are in a given epoch's batch is not on-chain-readable — the distributor's distribution logic is unverified source, and entry is claim-gated. If quoteToken() doesn't match, Finch says \"not confirmed\" and lists correlational candidates: tokens you hold that also have a Uniswap V4 pool paired against what you received. \"Could be\", not proof.",
   "",
   "WHAT THIS MISSES",
-  "• Finch indexes transfers of 15 tokenized stocks (NVDA, AAPL, TSLA, AMZN, SPCX, cbBTC, GLD, SPY, QQQ, DJT, GME, RDDT, GOOGL, RBLX, HOOD). A payout in any other asset isn't seen.",
+  "• Finch indexes transfers of 15 tokenized stocks (see /finchTop). A payout in any other asset isn't seen.",
   "• Why your wallet, and not another holder, is in an epoch's batch — the selection rule is off-chain.",
   "• A project can fund payouts by buying the asset with its treasury, with no pool ever pairing it against that asset — invisible to this method.",
   "• Off-chain / other-rollup treasuries are invisible to Finch.",
