@@ -17,6 +17,10 @@ const HELP = [
   "Finch — where your Robinhood Chain tokens came from.",
   "The Graph subgraph (Goldsky) · Uniswap V4 pools · callable via Bazantic.",
   "",
+  "/process    how Finch works out an answer",
+  "/forAgents  how agents call Finch (HTTP / MCP / Bazantic)",
+  "",
+  "",
   "① SET YOUR WALLET (once)",
   "   /account 0x…",
   "   try it:",
@@ -29,6 +33,8 @@ const HELP = [
   "   trace NVDA               ← adds the tx route + path",
   "   (one-shot: paste an address and a symbol together)",
   "",
+  "   /forget   clear your wallet",
+  "",
   "PONS LAUNCHES",
   "   /launches                recent launches",
   "   /launches NVDA           …paired against NVDA  (or Pons25, or FinchTop)",
@@ -39,9 +45,7 @@ const HELP = [
   "   /pons25     top 25 tokenized stocks by on-chain market cap",
   "   /finchtop   the tokens Finch tracks for transfers",
   "",
-  "/health   index freshness    ·    /forget   clear your wallet",
-  "/process  how Finch works out an answer, and what it can miss",
-  "/forAgents  how agents call Finch (HTTP / MCP / Bazantic)  ·  alias /api",
+  "/health   index freshness",
 ].join("\n")
 
 const PROCESS = [
