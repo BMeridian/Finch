@@ -37,8 +37,8 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "OPTIONS") return send(204, "")
 
-  if (url.pathname === "/seeAgent")     { setSeeMode("min");  return send(200, { call_logging: seeMode() }) }
-  if (url.pathname === "/seeAgentFull") { setSeeMode("full"); return send(200, { call_logging: seeMode() }) }
+  if (url.pathname === "/seeAgent" || url.pathname === "/seeAgentFull") { setSeeMode("full"); return send(200, { call_logging: seeMode() }) }
+  if (url.pathname === "/seeAgentMin")  { setSeeMode("min");  return send(200, { call_logging: seeMode() }) }
   if (url.pathname === "/agentOff")     { setSeeMode("off");  return send(200, { call_logging: seeMode() }) }
 
   if (url.pathname === "/health") return send(200, await freshness().catch(e => ({ error: String(e) })))

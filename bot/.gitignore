@@ -2,3 +2,4 @@ node_modules/
 .session.json
 .calls.jsonl
 .seemode
+.seewatch.json

@@ -1,7 +1,8 @@
 import { Bot } from "grammy"
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import { answer } from "./answer.js"
 import { getWallet, setWallet, clearWallet, getMode, setMode } from "./session.js"
-import { setSeeMode, seeMode, callStats } from "./calllog.js"
+import { setSeeMode, seeMode, callStats, tailCalls, callLogSize, type CallRecord } from "./calllog.js"
 import { freshness } from "./freshness.js"
 import { pons25Text } from "./pons25.js"
 import { finchTopText, coverageText } from "./lists.js"
@@ -14,22 +15,24 @@ const ADDR = /^0x[0-9a-fA-F]{40}$/
 
 const HELP = [
   "Finch — where your Robinhood Chain tokens came from.",
-  "A subgraph indexing Pons launches + Uniswap V4 pool activity (Goldsky-hosted).",
+  "The Graph subgraph (Goldsky) · Uniswap V4 pools · callable via Bazantic.",
   "",
   "① SET YOUR WALLET (once)",
   "   /account 0x…",
-  "   try it:  /account 0x2a58fb44f78d7b600aec945ba8cb253896793ed3",
+  "   try it:",
+  "   /account 0x2a58fb44f78d7b600aec945ba8cb253896793ed3",
+  "   /account 0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0",
   "",
   "② ASK",
   "   NVDA                     ← just the symbol",
   "   why did I get NVDA?",
-  "   trace NVDA               ← adds the address + tx route",
+  "   trace NVDA               ← adds the tx route + mechanism",
   "   (one-shot: paste an address and a symbol together)",
   "",
   "PONS LAUNCHES",
-  "   /launchesPons            recent launches",
-  "   then:  NVDA  or  Pons25  filter by pairing token",
-  "   then:  graduated         only tokens now on a Uniswap V4 pool",
+  "   /launches                recent launches",
+  "   /launches NVDA           …paired against NVDA  (or Pons25, or FinchTop)",
+  "   /grads NVDA              graduated only (now on a Uniswap V4 pool)",
   "   <token address> graduated?   check one token",
   "",
   "LISTS",
@@ -38,47 +41,80 @@ const HELP = [
   "",
   "/health   index freshness    ·    /forget   clear your wallet",
   "/process  how Finch works out an answer, and what it can miss",
+  "/forAgents  how agents call Finch (HTTP / MCP / Bazantic)  ·  alias /api",
 ].join("\n")
 
 const PROCESS = [
-  "How Finch answers \"why did I get <token>?\"",
+  "How Finch answers \"why did I get this token?\"",
   "",
   "1. FIND THE TRANSFER",
-  "   The most recent transfer of that token into your wallet, from Finch's",
+  "   The most recent transfer of that token into your wallet — from The Graph",
   "   subgraph (live window first, deep history as fallback).",
   "",
-  "2. CLASSIFY THE SENDER",
-  "   Known infra addresses (FeeEscrow, a Pons fee distributor, the launch",
-  "   factory, the Uniswap V4 PoolManager) are labelled from a fixed list. A",
-  "   payout from a distributor is called a \"Pons fee settlement\"; anything",
-  "   else is just a transfer from another wallet.",
+  "2. RESOLVE THE PAYER",
+  "   If the sender is a contract, Finch reads it on-chain: token() and",
+  "   quoteToken() — what it's built around and which asset it pays out.",
+  "   It also reads the payer's balance of that asset, its claim()/distribute()",
+  "   functions, and whether its logic references the Uniswap V4 PoolManager.",
   "",
-  "3. NAME A CONFIRMED SOURCE (when possible)",
-  "   If the sender is a per-token fee distributor, Finch reads its on-chain",
-  "   token() / quoteToken() and names that token outright — e.g. \"your share",
-  "   of <token> fees, paid in <asset>\".",
+  "3. TEST FOR PRO-RATA (the confirming step)",
+  "   Finch pulls every recipient the payer paid in that same tx, then reads",
+  "   token() balanceOf for you and a sample of them. If received ÷ held is",
+  "   flat across recipients, it's a pro-rata holder distribution — Finch",
+  "   states the rate (X per 1,000,000 held per round) as fact.",
   "",
-  "4. OTHERWISE, LIST CANDIDATES (correlational, not proof)",
-  "   Tokens your wallet holds or has touched that ALSO have a Uniswap V4",
-  "   pool paired against the token you received. These are \"could be\",",
-  "   never \"because of\".",
+  "4. IF NOT PRO-RATA",
+  "   Finch says so plainly: \"received from contract 0x… (token() = <name>).",
+  "   Not a confirmed mechanism.\" Why a wallet is on a payout list — designated",
+  "   wallet, treasury, an old snapshot — is not on-chain-readable.",
+  "   It then lists correlational candidates: tokens you hold that also have a",
+  "   Uniswap V4 pool paired against what you received. \"Could be\", not proof.",
   "",
   "WHAT THIS MISSES",
-  "• The source token may not be in the list at all. A project can collect",
-  "  fees in ETH, have its treasury buy <token> on the market, and airdrop",
-  "  it to holders — with no pool ever pairing that project against <token>.",
-  "• Off-chain / other-rollup treasuries (e.g. a perp position on Lighter)",
-  "  are invisible to Finch.",
+  "• The pro-rata check reads current balances — an older payout can't be",
+  "  verified because recipients have traded since.",
+  "• A project can fund payouts by buying the asset with its treasury, with no",
+  "  pool ever pairing it against that asset — invisible to this method.",
+  "• Off-chain / other-rollup treasuries are invisible to Finch.",
   "• Non-Pons launchpads (lunch.fun, etc.) are not yet indexed.",
-  "• The deep-history subgraph is still backfilling, so older activity may",
-  "  be incomplete — see /health.",
+  "• The deep-history subgraph is still backfilling — see /health.",
   "",
-  "Finch does data retrieval only — no signals, scores, or buy/sell calls.",
+  "Data retrieval only — no signals, scores, or buy/sell calls.",
+  "The Graph subgraph + Uniswap V4 pool data; callable by agents via Bazantic.",
 ].join("\n")
 
-bot.command(["start", "help"], (ctx) => ctx.reply(HELP))
+const AGENTS = [
+  "Finch for agents — same backend as this bot, three ways in.",
+  "",
+  "1. HTTP API",
+  "   GET|POST  {BASE}/query?wallet=0x…&q=<question>&format=json|prose",
+  "   GET  {BASE}/health   subgraph freshness vs chain head",
+  "   GET  {BASE}/calls    who has called Finch (proof of real agent calls)",
+  "   GET  {BASE}/SKILL.md · {BASE}/spec   manifest + OpenAPI",
+  "",
+  "2. MCP server (stdio) — Claude Code / Desktop / Cursor",
+  "   finch_wallet_provenance · finch_pons_activity · finch_health",
+  "",
+  "3. Bazantic gateway (x402/MPP, metered) — wraps {BASE}/query",
+  "",
+  "Every response carries confidence: \"signal only - not a recommendation\".",
+  "Candidate tokens are correlational, never causal — and the true source",
+  "can be absent entirely (treasury buys the asset and airdrops it).",
+  "Only Pons is indexed; deep history is still backfilling (see /health).",
+  "",
+  "Full manifest: {BASE}/SKILL.md",
+].join("\n")
+
+bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP) })
+bot.command("help", (ctx) => ctx.reply(HELP))
 bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { link_preview_options: { is_disabled: true } }))
+bot.command(["foragents", "api"], (ctx) => ctx.reply(agentsText(), { link_preview_options: { is_disabled: true } }))
 bot.command("ping", (ctx) => ctx.reply("pong"))
+
+function agentsText(): string {
+  const base = process.env.FINCH_PUBLIC_URL || "https://<finch-host>"
+  return AGENTS.replaceAll("{BASE}", base)
+}
 
 bot.command("account", (ctx) => {
   const arg = ctx.match.trim()
@@ -99,10 +135,10 @@ bot.command(["health", "status"], async (ctx) => {
     const f = await freshness()
     const s = callStats()
     return ctx.reply(
-      `Subgraph (Goldsky-hosted): block ${f.subgraph_block} · chain ${f.chain_block}\n` +
+      `The Graph subgraph (Goldsky): block ${f.subgraph_block} · chain ${f.chain_block}\n` +
       `Lag: ${f.lag_blocks.toLocaleString()} blocks (~${Math.round(f.lag_seconds / 60)} min) · ${f.fresh ? "fresh" : "backfilling"}\n` +
       `Indexing: Pons launch factory + Uniswap V4 PoolManager + stock-token transfers\n` +
-      `Agent calls: ${s.total} logged · logging ${seeMode()}`)
+      `Agents: ${s.total} calls logged (${seeMode()}) · live on the Bazantic gateway`)
   } catch (e) {
     return ctx.reply(`Health check failed: ${e}`)
   }
@@ -114,20 +150,67 @@ bot.command("finchtop", (ctx) => ctx.reply(finchTopText()))
 async function replyLaunches(ctx: any) {
   setMode(ctx.chat.id, "launches")
   await ctx.replyWithChatAction("typing")
-  const a = await answer("what launched on pons recently", undefined, "launches")
-  return ctx.reply(a, { link_preview_options: { is_disabled: true } })
+  const arg = (ctx.match ?? "").toString().trim()
+  const a = await answer(`what launched on pons recently ${arg}`.trim(), undefined, "launches")
+  return ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
 }
 bot.command(["launchespons", "launches", "pons", "recent"], replyLaunches)
-bot.command("graduated", async (ctx) => {
+
+async function replyGraduated(ctx: any) {
   setMode(ctx.chat.id, "launches")
   await ctx.replyWithChatAction("typing")
-  return ctx.reply(await answer("graduated pons tokens", undefined, "launches"), { link_preview_options: { is_disabled: true } })
-})
+  const arg = (ctx.match ?? "").toString().trim()
+  return ctx.reply(await answer(`graduated pons tokens ${arg}`.trim(), undefined, "launches"),
+    { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
+}
+bot.command(["graduated", "grads", "graduates"], replyGraduated)
 
-// Call-visibility toggles (affect the HTTP API's agent-call log; shared via file).
-bot.command("seeagent",     (ctx) => { setSeeMode("min");  return ctx.reply("Agent call logging: min (timestamp + caller).") })
-bot.command("seeagentfull", (ctx) => { setSeeMode("full"); return ctx.reply("Agent call logging: full (wallet, question, latency, UA).") })
-bot.command("agentoff",     (ctx) => { setSeeMode("off");  return ctx.reply("Agent call logging: off.") })
+// Call-visibility toggles. Beyond flipping the HTTP API's log verbosity, they
+// subscribe THIS chat to a live feed: the bot tails the shared call log and
+// posts each new agent call here until /agentOff.
+const WATCH_FILE = new URL("../.seewatch.json", import.meta.url).pathname
+type Watch = { chatId: number; offset: number }
+function readWatch(): Watch | null { try { return JSON.parse(readFileSync(WATCH_FILE, "utf8")) } catch { return null } }
+function writeWatch(w: Watch | null) {
+  try { w ? writeFileSync(WATCH_FILE, JSON.stringify(w)) : unlinkSync(WATCH_FILE) } catch { /* ignore */ }
+}
+function startWatching(chatId: number) { writeWatch({ chatId, offset: callLogSize() }) }
+
+const seeAgentReply = (mode: "min" | "full") =>
+  mode === "min"
+    ? "Agent calls: ON — terse (time + caller). New calls appear here. /agentOff to stop."
+    : "Agent calls: ON (caller, question, latency). New calls appear here. /agentOff to stop."
+
+bot.command(["seeagent", "seeagentfull"], (ctx) => { setSeeMode("full"); startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("full")) })
+bot.command("seeagentmin",                (ctx) => { setSeeMode("min");  startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("min")) })
+bot.command("agentoff",                   (ctx) => { setSeeMode("off");  writeWatch(null); return ctx.reply("Agent calls: OFF.") })
+
+function fmtCall(r: CallRecord, mode: "min" | "full"): string {
+  const t = r.ts.slice(11, 19) + "Z"
+  const caller = r.caller || "anonymous"
+  if (mode === "min") return `↘ agent call  ${t}  ${caller}  ${r.ok ? "ok" : "err"}`
+  const bits = [`↘ agent call  ${t}  ${caller}`]
+  if (r.wallet) bits.push(`   wallet ${r.wallet}`)
+  if (r.question) bits.push(`   q: ${r.question}`)
+  bits.push(`   ${r.format} · ${r.took_ms}ms · ${r.ok ? "ok" : "err"}`)
+  return bits.join("\n")
+}
+
+async function pumpWatch() {
+  const w = readWatch()
+  const mode = seeMode()
+  if (!w || mode === "off") return
+  const { records, offset } = tailCalls(w.offset)
+  if (offset !== w.offset) writeWatch({ ...w, offset })
+  for (const r of records) {
+    if (r.route !== "/query") continue
+    try {
+      await bot.api.sendMessage(w.chatId, fmtCall(r, mode === "full" ? "full" : "min"))
+      console.log(`feed -> chat ${w.chatId}: ${r.caller} ${r.question || "-"}`)
+    } catch (e) { console.error("feed send failed:", e) }
+  }
+}
+setInterval(() => { pumpWatch().catch(() => {}) }, 2500)
 
 const PONS25_RE = /^\s*pons\s*25\s*$/i
 const FINCHTOP_RE = /^\s*finch\s*top\s*$/i
@@ -135,14 +218,15 @@ const COVERAGE_RE = /(pons\s*25.*finch\s*top|finch\s*top.*pons\s*25|coverage|wha
 
 bot.on("message:text", async (ctx) => {
   const q = ctx.message.text
-  console.log(`msg from @${ctx.from?.username ?? ctx.from?.id}: ${q}`)
+  // never write wallet addresses to the journal
+  console.log(`msg from @${ctx.from?.username ?? ctx.from?.id}: ${q.replace(/0x[0-9a-fA-F]{40}/g, "0x…")}`)
 
   // Call-log toggles — accept any casing, with or without the slash
   // (Telegram commands are case-sensitive, so /agentOff misses bot.command).
   const bt = q.trim().replace(/^\//, "")
-  if (/^seeagentfull$/i.test(bt)) { setSeeMode("full"); return ctx.reply("Agent call logging: full (wallet, question, latency, UA).") }
-  if (/^seeagent$/i.test(bt))     { setSeeMode("min");  return ctx.reply("Agent call logging: min (timestamp + caller).") }
-  if (/^agentoff$/i.test(bt))     { setSeeMode("off");  return ctx.reply("Agent call logging: off.") }
+  if (/^see\s?agent\s?min$/i.test(bt))      { setSeeMode("min");  startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("min")) }
+  if (/^see\s?agent(\s?full)?$/i.test(bt))  { setSeeMode("full"); startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("full")) }
+  if (/^agent\s?off$/i.test(bt))            { setSeeMode("off");  writeWatch(null); return ctx.reply("Agent calls: OFF.") }
 
   // A message that is ONLY an address just sets the wallet — same as /account.
   const bare = q.trim()
@@ -152,14 +236,19 @@ bot.on("message:text", async (ctx) => {
   }
 
   if (/^\/?(process|method|methodology|how it works)$/i.test(bare)) return ctx.reply(PROCESS, { link_preview_options: { is_disabled: true } })
+  if (/^\/?(for\s?agents|api)$/i.test(bare)) return ctx.reply(agentsText(), { link_preview_options: { is_disabled: true } })
   if (COVERAGE_RE.test(q)) return ctx.reply(coverageText(), { link_preview_options: { is_disabled: true } })
   if (FINCHTOP_RE.test(q)) return ctx.reply(finchTopText())
   // bare "pons25" only shows the reference list when NOT in launches mode
   if (PONS25_RE.test(q) && getMode(ctx.chat.id) !== "launches" && !/launch/i.test(q))
     return ctx.reply(pons25Text(), { link_preview_options: { is_disabled: true } })
 
-  // short text form, any casing
-  if (/^\/?(launchespons|launches|recent launches)$/i.test(bare)) return replyLaunches(ctx)
+  // short text form, any casing, with an optional filter arg:
+  //   "launches", "launches NVDA", "grads NVDA", "graduates pons25"
+  let m = bare.match(/^\/?(launchespons|launches|recent launches)\b\s*(.*)$/i)
+  if (m) { ctx.match = m[2]; return replyLaunches(ctx) }
+  m = bare.match(/^\/?(grads?|graduates?|graduated)\b\s*(.*)$/i)
+  if (m) { ctx.match = m[2]; return replyGraduated(ctx) }
 
   // switch context: a launch-y ask puts the chat in "launches" mode so a
   // follow-up bare symbol filters by pairing token.
@@ -168,7 +257,7 @@ bot.on("message:text", async (ctx) => {
   await ctx.replyWithChatAction("typing")
   try {
     const a = await answer(q, getWallet(ctx.chat.id), getMode(ctx.chat.id))
-    await ctx.reply(a, { link_preview_options: { is_disabled: true } })
+    await ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
     console.log("replied ok")
   } catch (e) {
     console.error("answer failed:", e)

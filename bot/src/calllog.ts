@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs"
+import { appendFileSync, readFileSync, writeFileSync, statSync } from "node:fs"
 
 // So Finch can SEE agent calls. Every Gateway request lands here: an in-memory
 // ring for /calls, plus an append-only JSONL file that survives restarts.
@@ -49,6 +49,24 @@ export function logCall(rec: CallRecord) {
 
 export function recentCalls(limit = 50): CallRecord[] {
   return ring.slice(-limit).reverse()
+}
+
+// Cross-process tail of the JSONL file — the bot reads what the HTTP API wrote.
+// Returns records appended since `offset` bytes, and the new offset.
+export function callLogSize(): number {
+  try { return statSync(FILE).size } catch { return 0 }
+}
+export function tailCalls(offset: number): { records: CallRecord[]; offset: number } {
+  let text = ""
+  try { text = readFileSync(FILE, "utf8") } catch { return { records: [], offset } }
+  if (offset > text.length) offset = 0          // file rotated/truncated
+  const slice = text.slice(offset)
+  const lastNl = slice.lastIndexOf("\n")
+  if (lastNl < 0) return { records: [], offset }
+  const records = slice.slice(0, lastNl).split("\n").filter(Boolean)
+    .map(l => { try { return JSON.parse(l) as CallRecord } catch { return null } })
+    .filter((r): r is CallRecord => r !== null)
+  return { records, offset: offset + lastNl + 1 }
 }
 
 export function callStats() {
