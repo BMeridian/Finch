@@ -71,8 +71,11 @@ const server = createServer(async (req, res) => {
       const result = fmt === "prose"
         ? { answer: await answer(question, wallet) }
         : await answerJson(question, wallet)
+      const answerText = typeof (result as { answer?: unknown }).answer === "string"
+        ? (result as { answer: string }).answer
+        : JSON.stringify(result)
       logCall({ ts: new Date().toISOString(), caller, ua: String(req.headers["user-agent"] || ""), route: "/query",
-                format: fmt === "prose" ? "prose" : "json", wallet: wallet ?? null, question, took_ms: Date.now() - t0, ok: true })
+                format: fmt === "prose" ? "prose" : "json", wallet: wallet ?? null, question, answer: answerText, took_ms: Date.now() - t0, ok: true })
       return send(200, result)
     } catch (e) {
       logCall({ ts: new Date().toISOString(), caller, ua: String(req.headers["user-agent"] || ""), route: "/query",

@@ -14,6 +14,7 @@ export interface CallRecord {
   format: "json" | "prose"
   wallet: string | null
   question: string
+  answer?: string
   took_ms: number
   ok: boolean
 }
@@ -37,7 +38,7 @@ export function logCall(rec: CallRecord) {
   const mode = readMode()
   if (mode === "off") return
   const stored: CallRecord = mode === "min"
-    ? { ...rec, ua: "", route: rec.route, question: "", wallet: null, took_ms: 0 }
+    ? { ...rec, ua: "", route: rec.route, question: "", answer: "", wallet: null, took_ms: 0 }
     : rec
   ring.push(stored)
   if (ring.length > RING_MAX) ring.shift()

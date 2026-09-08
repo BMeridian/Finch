@@ -126,13 +126,14 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     ).then(d => d.t).catch(() => [] as { to: string; amount: string }[])
     const n = batch.length || "many"
 
-    // recurrence
-    const rec = await gql<{ t: { block: string }[] }>(
+    // recurrence (within the indexed range)
+    const recTx = await gql<{ t: { block: string }[] }>(
       `query ($w: String!, $src: Bytes!) {
         t: transfers(where: { to: $w, from: $src }, orderBy: block, orderDirection: asc, first: 1000) { block }
       }`, { w: r.to, src: D },
     ).then(d => d.t).catch(() => [] as { block: string }[])
-    const recN = rec.length
+    const recN = recTx.length
+    const recStr = `${recN}× in the indexed range`
 
     // The pro-rata check reads *current* balances. If it PASSES, that's proof
     // regardless of age. If it FAILS on an old payout, recipients have likely
@@ -162,17 +163,17 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
           `Contract ${shortAddr(D)} pays ${symbol} to ${esc(c.symbol)} holders each round, ` +
           `~${pr.perMillion!.toFixed(4)} ${symbol} per 1M ${esc(c.symbol)} ` +
           `(verified across ${pr.samples} recipients in this tx). ` +
-          `Received ${recN}× from it.\n\nSend "trace" for the full route.`
+          `Received ${recStr} from it.\n\nSend "trace" for the full route.`
       }
       const tk = c ? ` (its token() returns ${esc(c.symbol)})` : ""
       const why = stale
-        ? `\n\nThis payout is from ${tsET(r.timestamp)}.`
+        ? `\n\nThis payout is from ${tsET(r.timestamp)} — Finch indexes from ~Sep 3, so earlier receipts aren't shown.`
         : cands.length
           ? `\n\nNot pro-rata to current ${c ? esc(c.symbol) : symbol} holdings. ${symbol}-paired tokens this wallet has touched: ` +
             cands.slice(0, 5).map(x => esc(x.symbol)).join(", ") + `.`
           : `\n\nNot pro-rata to current holdings; why this wallet is a recipient isn't on-chain-readable.`
       return `This wallet received ${amt} ${symbol} from contract ${shortAddr(D)}${tk}, ` +
-        `1 of ${n} recipients in tx ${shortTx(r.txHash)}.${recN > 1 ? ` Received ${recN}× from it.` : ""}${why}` +
+        `1 of ${n} recipients in tx ${shortTx(r.txHash)}.${recN > 1 ? ` Received ${recStr} from it.` : ""}${why}` +
         `\n\nSend "trace" for the route.`
     }
 
@@ -205,11 +206,11 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
         (c.functions.length ? ` · exposes ${[...new Set(c.functions.map(f => f.split("(")[0] + "()"))].join(", ")}` : "") + `\n\n` +
         lines + `\n\n` +
         (c.description ? `${esc(c.symbol)} About (on-chain, immutable): "${esc(c.description)}"\n\n` : "") +
-        `Recurring — ${recN}× to this wallet` + (rec.length ? ` since block ${parseInt(rec[0].block, 10)}` : "") + `.`
+        `Recurring — ${recStr}` + (recTx.length ? `, first at block ${parseInt(recTx[0].block, 10)}` : "") + `.`
     } else {
       const list = cands.slice(0, 5).map(x => `  ${esc(x.symbol)}  ${x.address}`).join("\n")
       const reason = stale
-        ? `This payout is from ${tsET(r.timestamp)}.`
+        ? `This payout is from ${tsET(r.timestamp)} — Finch indexes from ~Sep 3, so any earlier receipts aren't shown.`
         : `Payouts in this tx are not pro-rata to current ${c ? esc(c.symbol) : "token"} holdings` +
           (pr ? ` (checked ${pr.samples} recipients)` : "") +
           `. Why this wallet is a recipient is not on-chain-readable.`
@@ -217,7 +218,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
         `<b>NOT CONFIRMED</b>\n\n` +
         `Contract ${D}${c ? ` has token()=${esc(c.symbol)}, quoteToken()=${symbol}` : ""}. ${reason}\n\n` +
         (cands.length ? `${symbol}-paired tokens this wallet has touched (correlation only):\n${list}\n\n` : "") +
-        `Recurring — ${recN}× to this wallet.`
+        `Recurring — ${recStr}.`
     }
 
     return `<b>FACT</b>\n` +

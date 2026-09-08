@@ -48,33 +48,20 @@ const PROCESS = [
   "How Finch answers \"why did I get this token?\"",
   "",
   "1. FIND THE TRANSFER",
-  "   The most recent transfer of that token into your wallet — from The Graph",
-  "   subgraph (live window first, deep history as fallback).",
+  "The most recent transfer of that token into your wallet — from The Graph subgraph (live window first, deep history as fallback).",
   "",
   "2. RESOLVE THE PAYER",
-  "   If the sender is a contract, Finch reads it on-chain: token() and",
-  "   quoteToken() — what it's built around and which asset it pays out.",
-  "   It also reads the payer's balance of that asset, its claim()/distribute()",
-  "   functions, and whether its logic references the Uniswap V4 PoolManager.",
+  "If the sender is a contract, Finch reads it on-chain: token() and quoteToken() — what it's built around and which asset it pays out. It also reads the payer's balance of that asset, its claim()/distribute() functions, and whether its logic references the Uniswap V4 PoolManager.",
   "",
   "3. TEST FOR PRO-RATA (the confirming step)",
-  "   Finch pulls every recipient the payer paid in that same tx, then reads",
-  "   token() balanceOf for you and a sample of them. If received ÷ held is",
-  "   flat across recipients, it's a pro-rata holder distribution — Finch",
-  "   states the rate (X per 1,000,000 held per round) as fact.",
+  "Finch pulls every recipient the payer paid in that same tx, then reads token() balanceOf for you and a sample of them. If received ÷ held is flat across recipients, it's a pro-rata holder distribution — Finch states the rate (X per 1,000,000 held per round) as fact.",
   "",
   "4. IF NOT PRO-RATA",
-  "   Finch says so plainly: \"received from contract 0x… (token() = <name>).",
-  "   Not a confirmed mechanism.\" Why a wallet is on a payout list — designated",
-  "   wallet, treasury, an old snapshot — is not on-chain-readable.",
-  "   It then lists correlational candidates: tokens you hold that also have a",
-  "   Uniswap V4 pool paired against what you received. \"Could be\", not proof.",
+  "Finch says so plainly: \"received from contract 0x… (token() = <name>). Not a confirmed mechanism.\" Why a wallet is on a payout list — designated wallet, treasury, an old snapshot — is not on-chain-readable. It then lists correlational candidates: tokens you hold that also have a Uniswap V4 pool paired against what you received. \"Could be\", not proof.",
   "",
   "WHAT THIS MISSES",
-  "• The pro-rata check reads current balances — an older payout can't be",
-  "  verified because recipients have traded since.",
-  "• A project can fund payouts by buying the asset with its treasury, with no",
-  "  pool ever pairing it against that asset — invisible to this method.",
+  "• The pro-rata check reads current balances — an older payout can't be verified because recipients have traded since.",
+  "• A project can fund payouts by buying the asset with its treasury, with no pool ever pairing it against that asset — invisible to this method.",
   "• Off-chain / other-rollup treasuries are invisible to Finch.",
   "• Non-Pons launchpads (lunch.fun, etc.) are not yet indexed.",
   "• The deep-history subgraph is still backfilling — see /health.",
@@ -87,20 +74,21 @@ const AGENTS = [
   "Finch for agents — same backend as this bot, three ways in.",
   "",
   "1. HTTP API",
-  "   GET|POST  {BASE}/query?wallet=0x…&q=<question>&format=json|prose",
-  "   GET  {BASE}/health   subgraph freshness vs chain head",
-  "   GET  {BASE}/calls    who has called Finch (proof of real agent calls)",
-  "   GET  {BASE}/SKILL.md · {BASE}/spec   manifest + OpenAPI",
+  "Base: {BASE}",
+  "",
+  "/query?wallet=0x…&q=<question>&format=json|prose",
+  "— GET or POST; ask why a wallet received a token",
+  "/health — subgraph freshness vs chain head",
+  "/calls — who has called Finch (proof of real agent calls)",
+  "/SKILL.md and /spec — manifest + OpenAPI",
   "",
   "2. MCP server (stdio) — Claude Code / Desktop / Cursor",
-  "   finch_wallet_provenance · finch_pons_activity · finch_health",
+  "Tools: finch_wallet_provenance, finch_pons_activity, finch_health",
   "",
-  "3. Bazantic gateway (x402/MPP, metered) — wraps {BASE}/query",
+  "3. Bazantic gateway (x402/MPP, metered)",
+  "Wraps the /query endpoint above.",
   "",
-  "Every response carries confidence: \"signal only - not a recommendation\".",
-  "Candidate tokens are correlational, never causal — and the true source",
-  "can be absent entirely (treasury buys the asset and airdrops it).",
-  "Only Pons is indexed; deep history is still backfilling (see /health).",
+  "Every response carries confidence: \"signal only - not a recommendation\". Candidate tokens are correlational, never causal — and the true source can be absent entirely (treasury buys the asset and airdrops it). Only Pons is indexed; deep history is still backfilling (see /health).",
   "",
   "Full manifest: {BASE}/SKILL.md",
 ].join("\n")
@@ -185,6 +173,21 @@ bot.command(["seeagent", "seeagentfull"], (ctx) => { setSeeMode("full"); startWa
 bot.command("seeagentmin",                (ctx) => { setSeeMode("min");  startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("min")) })
 bot.command("agentoff",                   (ctx) => { setSeeMode("off");  writeWatch(null); return ctx.reply("Agent calls: OFF.") })
 
+function trimAnswer(a: string, keep = 3): string {
+  const lines = a.split("\n")
+  const out: string[] = []
+  let bullets = 0, dropped = 0
+  for (const l of lines) {
+    if (/^\s*[•\-*]/.test(l)) {
+      bullets++
+      if (bullets <= keep) out.push(l); else dropped++
+    } else out.push(l)
+  }
+  if (dropped) out.push(`…${dropped} more`)
+  const s = out.join("\n")
+  return s.length > 1200 ? s.slice(0, 1200) + " …" : s
+}
+
 function fmtCall(r: CallRecord, mode: "min" | "full"): string {
   const t = r.ts.slice(11, 19) + "Z"
   const caller = r.caller || "anonymous"
@@ -193,6 +196,7 @@ function fmtCall(r: CallRecord, mode: "min" | "full"): string {
   if (r.wallet) bits.push(`   wallet ${r.wallet}`)
   if (r.question) bits.push(`   q: ${r.question}`)
   bits.push(`   ${r.format} · ${r.took_ms}ms · ${r.ok ? "ok" : "err"}`)
+  if (r.answer) bits.push("", "answer: " + trimAnswer(r.answer))
   return bits.join("\n")
 }
 
