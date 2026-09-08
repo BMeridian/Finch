@@ -1,6 +1,7 @@
 import { gql, gqlOn } from "./subgraph.js"
 import { human, tokenMeta } from "./tokens.js"
 import { candidatesFor } from "./candidates.js"
+import { resolveDistributors, describeMany, verifyProRata } from "./distributor.js"
 import type { Parsed } from "./extract.js"
 import type { QueryResult, TransferRow } from "./query.js"
 
@@ -10,12 +11,7 @@ import type { QueryResult, TransferRow } from "./query.js"
 // hence the fixed `caveat` and `confidence` fields.
 
 const CONFIDENCE = "signal only - not a recommendation"
-const CAVEAT =
-  "Candidate tokens reflect trading-history overlap with Uniswap V4 pools paired against the " +
-  "received token; no LP or deployer activity found linking this wallet to them. Not a confirmed " +
-  "causal mechanism. The true source may be absent entirely — a project can fund payouts from a " +
-  "treasury that buys the asset, with no pool pairing it against the received token."
-const DATA_SOURCE = "Goldsky-hosted subgraph indexing the Pons launch factory + Uniswap V4 PoolManager, Robinhood Chain 4663"
+const DATA_SOURCE = "The Graph-derived Goldsky subgraph (Pons launch factory + Uniswap V4 PoolManager), Robinhood Chain 4663; this API is also live on the Bazantic gateway"
 
 const isFeeSettlement = (r: TransferRow) => /fee claim|fee settlement|feeescrow/i.test(r.fromLabel ?? "")
 
@@ -23,7 +19,7 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
   if (q.kind === "launches") {
     return {
       query: "pons_launches",
-      pair_filter: p.pairFilter ?? (p.pairGroup === "pons25" ? "pons25" : null),
+      pair_filter: p.pairFilter ?? p.pairGroup ?? null,
       since_hours: p.sinceHours ?? null,
       launches: q.launches.map(l => ({
         token: l.token, pair_token: l.pairToken, creator: l.creator,
@@ -78,8 +74,41 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
     { tx: r.txHash, src: r.from },
   ).then(d => d.c.length).catch(() => 0)
 
-  const cands = await candidatesFor(r.to, r.token).catch(() => [] as { symbol: string; address: string }[])
-  const candidate_tokens = cands.map(c => ({ symbol: c.symbol, address: c.address, confidence: "correlational only" }))
+  // The payer of this token IS the distributor — resolve it on-chain.
+  const D = r.from
+  const payers = [...new Set(q.transfers.filter(t => t.token === r.token).map(t => t.from))]
+  const resolved = await resolveDistributors(payers, r.token, p.wallet).catch(() => [])
+  const c = resolved.find(x => x.distributor === D.toLowerCase()) ?? resolved[0]
+
+  // batch of this same tx from D → pro-rata test
+  const batch = await gqlOn<{ t: { to: string; amount: string }[] }>(q.via,
+    `query ($tx: Bytes!, $from: Bytes!) { t: transfers(where: { txHash: $tx, from: $from }, first: 1000) { to amount } }`,
+    { tx: r.txHash, from: D },
+  ).then(d => d.t).catch(() => [] as { to: string; amount: string }[])
+
+  let pr = null as Awaited<ReturnType<typeof verifyProRata>> | null
+  if (c && c.quoteToken === r.token && batch.length >= 3) {
+    pr = await verifyProRata(c.token, p.wallet,
+      batch.map(b => ({ addr: b.to, amount: BigInt(b.amount) }))).catch(() => null)
+  }
+
+  const corr = (await candidatesFor(r.to, r.token).catch(() => [] as { symbol: string; address: string }[]))
+    .filter(x => !c || x.address.toLowerCase() !== c.token)
+  const cdescs = corr.length ? await describeMany(corr.map(x => x.address)).catch(() => new Map<string, string>()) : new Map<string, string>()
+
+  const mechanism = pr?.proRata && c ? {
+    type: "pro_rata_holder_distribution",
+    distributes: symbol,
+    to_holders_of: { symbol: c.symbol, address: c.token, description: c.description || null },
+    rate_per_million: Number(pr.perMillion!.toFixed(6)),
+    rate_unit: `${symbol} per 1,000,000 ${c.symbol} per round`,
+    wallet_holds: pr.walletBalance ? human(pr.walletBalance, c.token) : null,
+    verified_across_recipients: pr.samples,
+    payer_contract: D,
+    references_v4_pool_manager: c.refsPoolManager,
+    contract_holds_distributed_asset: c.distributorHolds ? human(c.distributorHolds, r.token) : null,
+    confidence: "on-chain confirmed — received÷held is flat across sampled recipients in this tx",
+  } : null
 
   return {
     wallet: p.wallet,
@@ -87,19 +116,26 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
       token_received: symbol,
       amount: human(r.amount, r.token),
       tx: r.txHash,
+      paid_by_contract: D,
+      recipients_in_tx: batch.length || rc || null,
       source_label: r.fromLabel ?? null,
-      mechanism: isFeeSettlement(r)
-        ? `batched Multicall3 payout, 1 of ${rc || "?"} recipients`
-        : "direct transfer",
     },
     recurring: {
       count: Math.max(1, blocks.length),
       first_seen_block: blocks[0] ?? parseInt(r.block, 10),
       most_recent_block: blocks[blocks.length - 1] ?? parseInt(r.block, 10),
     },
-    candidate_tokens,
-    caveat: candidate_tokens.length ? CAVEAT : null,
-    data_source: DATA_SOURCE,
+    mechanism,
+    candidates: mechanism ? [] : corr.map(x => ({
+      symbol: x.symbol, address: x.address,
+      description: cdescs.get(x.address.toLowerCase()) ?? null,
+      basis: `${symbol}-paired Uniswap V4 pool; this wallet has transferred it`,
+      confidence: "correlational only",
+    })),
+    note: mechanism
+      ? "Mechanism verified on-chain: the payer distributes the received asset pro-rata to holders of the named token."
+      : `Contract ${D}${c ? ` has token()=${c.symbol}, quoteToken()=${symbol}` : ""} but the payouts in this tx are not pro-rata to holdings. Why this wallet is a recipient is not on-chain-readable. Candidates below are correlational only.`,
+    data_source: DATA_SOURCE + " + on-chain reads (token/quoteToken/balanceOf)",
     confidence: CONFIDENCE,
   }
 }

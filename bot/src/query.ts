@@ -1,6 +1,7 @@
 import { gqlOn } from "./subgraph.js"
 import type { Parsed } from "./extract.js"
 import { PONS25 } from "./pons25.js"
+import { TOKENS } from "./tokens.js"
 
 export interface TransferRow {
   token: string; from: string; to: string; amount: string
@@ -40,21 +41,23 @@ export async function runQuery(p: Parsed): Promise<QueryResult> {
 
   if (p.intent === "launches") {
     const since = p.sinceHours ? Math.floor(Date.now() / 1000) - p.sinceHours * 3600 : 0
-    const pons25Set = p.pairGroup === "pons25" ? PONS25.map(r => r.address) : null
+    const groupSet = p.pairGroup === "pons25" ? PONS25.map(r => r.address)
+      : p.pairGroup === "finchtop" ? Object.keys(TOKENS)
+      : null
     const filter = [
       `timestamp_gte: $since`,
       p.pairFilter ? `pairToken: $pf` : "",
-      pons25Set ? `pairToken_in: $p25` : "",
+      groupSet ? `pairToken_in: $grp` : "",
       p.onlyGraduated ? `graduated: true` : "",
     ].filter(Boolean).join(", ")
-    const q = `query ($since: BigInt!, $pf: Bytes, $p25: [Bytes!]) {
+    const q = `query ($since: BigInt!, $pf: Bytes, $grp: [Bytes!]) {
       tokenLaunches(where: { ${filter} }, orderBy: timestamp, orderDirection: desc, first: 12) {
         token creator pairToken graduated graduationTimestamp timestamp txHash
       }
     }`
     const vars: Record<string, unknown> = { since: since.toString() }
     if (p.pairFilter) vars.pf = p.pairFilter
-    if (pons25Set) vars.p25 = pons25Set
+    if (groupSet) vars.grp = groupSet
 
     // Graduations are rare historical events — the deep index has the full set,
     // so query BOTH and merge (live catches the newest, history the rest).
@@ -71,7 +74,7 @@ export async function runQuery(p: Parsed): Promise<QueryResult> {
     }
 
     const live = await gqlOn<{ tokenLaunches: LaunchRow[] }>("live", q, vars).catch(() => ({ tokenLaunches: [] as LaunchRow[] }))
-    const filtered = !!(p.pairFilter || pons25Set)
+    const filtered = !!(p.pairFilter || groupSet)
     if (live.tokenLaunches.length >= (filtered ? 1 : 3) || since > 0) return { kind: "launches", launches: live.tokenLaunches }
     const hist = await gqlOn<{ tokenLaunches: LaunchRow[] }>("history", q, { ...vars, since: "0" })
     const seen = new Set(live.tokenLaunches.map(l => l.token))
