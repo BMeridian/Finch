@@ -1,0 +1,25 @@
+[Unit]
+Description=Finch Substreams sink (Pinax -> Postgres, pure Substreams live path)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/_Finch/substreams
+EnvironmentFile=/etc/finch/finch.env
+# Pinax caps concurrent streams on this key -> 1 parallel worker + always-restart
+# absorbs the intermittent ResourceExhausted. No stop block: backfills to head
+# from the demo block, then tails live.
+ExecStart=/usr/local/bin/substreams sink postgres \
+  --dsn=${SUBSTREAMS_SINK_DSN} \
+  -e ${SUBSTREAMS_ENDPOINT} \
+  --start-block=53505176 \
+  -H "X-Substreams-Parallel-Workers: 1" \
+  /home/ec2-user/_Finch/substreams/finch-substreams-v0.1.0.spkg map_events
+Restart=always
+RestartSec=15
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

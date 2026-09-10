@@ -4,33 +4,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Phase 1 done: subgraphs live on Goldsky. `SUBGRAPH_QUERY_URL` = history
-(`finch-rpc/0.4.0`, 14 tokens, ~59% synced); `finch-rpc/0.5.0` (15 tokens, adds
-HOOD) backfilling from scratch — cut `SUBGRAPH_QUERY_URL` to it once caught up.
-`SUBGRAPH_LIVE_URL` = `finch-live/0.2.0` (15 tokens incl HOOD, recent window).
-Goldsky project is at its 3-subgraph limit. Bot + NLI + HTTP API built. Track B
-substreams module built, subgraph sink still open (Goldsky does not do
-substreams-powered subgraphs). `DOC_prompt.md` is the build spec — but the demo
-fixture, watch list, and answer wording in it have been superseded by later chat
-instructions (canonical wallet `0x2a58fb44…ed3`, 15-token watch list, terser bot
-answers).
+**Pivoted off subgraphs.** The Graph dev-rel (Pedro) confirmed a Goldsky-hosted
+subgraph does NOT satisfy the track ("must be consumed directly from The Graph's
+network or Studio"), and Robinhood Chain (eip155:4663) is on neither. Pure
+Substreams is the eligible path (Substreams bounty; whether Pinax-as-registry-
+provider also counts for the main track is an open question out to Pedro).
+
+**Live architecture: Substreams → Postgres → bot.**
+- `substreams/` module streams from Pinax (`robinhood.substreams.pinax.network:443`).
+- `substreams sink postgres` (relational mode on `map_events` / `finch.v1.Events`)
+  writes tables `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`,
+  `poolswap`, `poolmodifyliquidity` to **Neon** managed Postgres (`DATABASE_URL`).
+  No `db_out`/`graph_out`, no schema.sql, no Rust changes — the sink builds the
+  schema from the proto.
+- Bot queries Neon directly (`bot/src/db.ts`, `pg`). `bot/src/subgraph.ts` deleted;
+  `query.ts` / `freshness.ts` / `candidates.ts` / `format.ts` / `serialize.ts` /
+  `ens.ts` rewritten GraphQL→SQL.
+- On the box: `finch-sink.service` (start-block 53505176, `-H
+  'X-Substreams-Parallel-Workers: 1'` — Pinax caps concurrent streams — no stop
+  block: backfills to head ~15h then tails live; `Restart=always` absorbs the
+  intermittent `ResourceExhausted`).
+
+Goldsky subgraphs still deployed (`SUBGRAPH_QUERY_URL` / `SUBGRAPH_LIVE_URL`) but
+the bot no longer reads them. `bot/scripts/seed-from-goldsky.mjs` exists
+(block-split seed for history breadth) but is NOT run — pure-Substreams
+provenance kept clean pending Pedro. `DOC_prompt.md` build spec is superseded (canonical wallet
+`0x2a58fb44…ed3`, 15-token watch list, terser answers).
 
 ## What Finch is
 
-A Telegram bot (`@FinchBot`) backed by a subgraph that indexes Pons launchpad
-activity and wallet transfers on Robinhood Chain (chain ID 4663, RPC
+A Telegram bot (`@FinchBot`) backed by a Substreams pipeline that indexes Pons
+launchpad activity and wallet transfers on Robinhood Chain (chain ID 4663, RPC
 `https://rpc.mainnet.chain.robinhood.com`, explorer
 `robinhoodchain.blockscout.com`). It answers natural-language questions about a
-wallet's activity and new token launches. The subgraph-backed query API is also
-registered standalone in Bazantic; Finch is just one consumer of it, not a
-proxy other agents call through.
+wallet's activity and new token launches. The query API is also registered
+standalone in Bazantic; Finch is just one consumer of it, not a proxy other
+agents call through.
 
 ## Structure
 
 ```
-/subgraph    - The Graph subgraph (schema, subgraph.yaml, AssemblyScript mappings)
-/substreams  - Track B: Substreams-powered subgraph (Pinax source) — sink still open
+/subgraph    - Legacy AssemblyScript subgraph (Goldsky) — no longer read by the bot
+/substreams  - LIVE data source: Substreams module (Pinax) + finch.proto + spkg
 /bot         - Telegram bot (@FinchRH_bot) + NLI backend + HTTP API
+  src/db.ts        - pg pool + SQL helpers against Neon (the Substreams sink target)
   src/answer.ts    - answer() prose / answerJson() structured — shared extract+query
   src/http.ts      - HTTP API (the endpoint Bazantic wraps): /query /health /calls /SKILL.md
   src/calllog.ts   - every Gateway/agent call logged (in-memory ring + .calls.jsonl)
@@ -75,15 +92,20 @@ same `answer()`/`answerJson()` backend.
   are independently verified (Pons V2 factory, Meme Hook, V1 legacy factory).
   Check every other address (PoolManager, PositionManager, FeeEscrow, stock
   tokens, demo fixture addresses) on Blockscout first.
-- **Deploy target**: Subgraph Studio does NOT support Robinhood Chain (confirmed
-  — The Graph networks registry lists `eip155:4663` with an empty `subgraphs`
-  service list; Studio deploy returns "network not supported"). Use Goldsky or
-  Pinax (registry-listed Substreams/Firehose provider for this chain). The
-  `GRAPH_QUERY_KEY` gateway keys in `.env` cannot query a non-network subgraph.
-- **Live data only** — the subgraph must query the Goldsky/Pinax endpoint live,
-  not mocked or static data (Graph requirement). The canonical demo tx is
-  hardcoded as a test fixture with locked answer wording, but that is a fixture,
-  not a data-source substitute.
+- **Deploy target**: Subgraph Studio + The Graph decentralized network do NOT
+  support Robinhood Chain (`eip155:4663` — registry lists it with an empty
+  `subgraphs` service list). Data source is Pinax Substreams
+  (`robinhood.substreams.pinax.network:443`), registry-listed Firehose/Substreams
+  provider for this chain, sunk to Neon Postgres.
+- **The box is openSUSE Leap 16.0** (`zypper`, not `dnf` — DOC_deploy.md is stale),
+  t3.micro, ~935MB RAM with ~136MB free — which is why Postgres is Neon-managed,
+  not on-box. Services: `finch-api`, `finch-bot`, `finch-sink`.
+- **Live data only** — the sink streams the Pinax endpoint live, not mocked or
+  static data. The canonical demo tx is a hardcoded test fixture with locked
+  answer wording, but that is a fixture, not a data-source substitute.
+- **Pinax concurrent-stream cap**: this key rejects parallel workers
+  (`ResourceExhausted: Concurrent stream limit exceeded`). Always pass
+  `-H 'X-Substreams-Parallel-Workers: 1'`; retries / `Restart=always` get through.
 
 ## Hard constraints
 

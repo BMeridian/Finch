@@ -61,20 +61,35 @@ substreams run -e robinhood.substreams.pinax.network:443 substreams.yaml graph_o
 
 substreams 1.22.0 · rustc 1.93.1 + wasm32-unknown-unknown · buf 1.72.0 · protoc
 
-## Sink — Goldsky (BLOCKED: account)
+## Sink — `substreams sink postgres` → Neon (LIVE)
 
-`graph/subgraph.yaml` is a `kind: substreams` subgraph pointing at `graph_out`.
-Deploy path once a Goldsky account exists:
+`kind: substreams` subgraphs are deprecated from graph-node (Pedro, 2026-09-09) —
+`graph/` and `graph_out` are dead. The live path is the folded-in SQL sink:
 
 ```
-goldsky login                                         # needs GOLDSKY_API_KEY / account
-cd substreams && substreams pack substreams.yaml
-goldsky subgraph deploy finch-substreams/0.1.0 --path ./graph
+export SUBSTREAMS_API_TOKEN=$(grep '^SUBSTREAMS_API_TOKEN=' ../.env | cut -d= -f2-)
+DSN='psql://<neon user:pass@host>/neondb?sslmode=require'    # DATABASE_URL with psql:// scheme
+
+# one-time — relational mode builds tables from finch.v1.Events, no schema.sql:
+substreams sink postgres setup --dsn="$DSN" substreams.yaml map_events
+
+# run (1 worker: Pinax caps concurrent streams; no stop block = backfill then live):
+substreams sink postgres --dsn="$DSN" -e robinhood.substreams.pinax.network:443 \
+  --start-block=53505176 -H 'X-Substreams-Parallel-Workers: 1' \
+  finch-substreams-v0.1.0.spkg map_events
 ```
 
-Then run the Track A success query against the Goldsky GraphQL endpoint:
-`Transfer` where `txHash = 0x022e94a3…b53b9` and `to = 0x2a466c3edd…63e9` →
-expect `amount 4459483197045479`, `fromLabel "Pons fee claim contract"`.
+Tables: `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`, `poolswap`,
+`poolmodifyliquidity` (proto field names, `"from"`/`"to"` quoted, `block`/
+`timestamp` NUMERIC, plus `_block_number_` / `_block_timestamp_`). No PKs (proto
+carries no schema.proto annotations) — fine for our read patterns.
+
+Verify the canonical fixture landed:
+`select amount, from_label from transfer where tx_hash='0x022e94a3…b53b9'
+and "to"='0x2a58fb44f78d7b600aec945ba8cb253896793ed3';`
+→ `7370695524996258`, `Pons fee claim contract` (100 recipients in that tx).
+
+On the box: `deploy/finch-sink.service` (see `deploy/DOC_deploy.md`).
 
 ## Verified against the canonical fixture (live Pinax data, 2026-09-06)
 
