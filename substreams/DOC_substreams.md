@@ -75,18 +75,23 @@ export SUBSTREAMS_API_TOKEN=$(grep '^SUBSTREAMS_API_TOKEN=' ../.env | cut -d= -f
 DSN='psql://<neon user:pass@host>/neondb?sslmode=require'    # DATABASE_URL, psql:// scheme
 
 # one-time — relational mode builds tables from finch.v1.Events, no schema.sql.
-# map_raw not map_events: map_events needs ~3.5M blocks of store backprocessing.
-substreams sink postgres setup --dsn="$DSN" substreams.yaml map_raw
+# Sink map_bot (v0.1.1): map_raw minus pool_swaps / pool_modify_liquidity. The
+# bot never reads those, and map_raw's unfiltered V4-swap write volume outran the
+# Aiven free tier (persistent, growing sink lag). map_bot keeps up at fresh:true.
+substreams sink postgres setup --dsn="$DSN" finch-substreams-v0.1.1.spkg map_bot
 
-# run. --start-block NEAR CHAIN HEAD (last ~1-2 days) — Neon free tier is 512 MB
-# and full history overruns it (poolswap ~200 MB unused; Transfer ~0.8 MB/1k blk).
-# No stop block = backfill then tail live.
+# run. --start-block ~200k back (~1.4 days) — covers the demo wallets' recent
+# payouts; small enough for the 1 GB Aiven tier with map_bot's write volume.
 substreams sink postgres --dsn="$DSN" -e mainnet.robinhood.streamingfast.io:443 \
-  --start-block=<head-minus-~150k> \
-  finch-substreams-v0.1.0.spkg map_raw
+  --start-block=<head-minus-200k> \
+  finch-substreams-v0.1.1.spkg map_bot
 
 # size guard: deploy/finch-prune.timer runs bot/scripts/prune-neon.mjs hourly —
-# TRUNCATE poolswap/poolmodifyliquidity, keep transfer to PRUNE_WINDOW_BLOCKS.
+# keep transfer to PRUNE_WINDOW_BLOCKS (poolswap/poolmodifyliquidity are empty
+# with map_bot but the TRUNCATE is harmless).
+#
+# NOTE: `substreams sink postgres setup` reads a row from _sink_info_. Never
+# TRUNCATE the sink meta tables — DROP them (and re-run setup) for a clean start.
 ```
 
 Tables: `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`, `poolswap`,
