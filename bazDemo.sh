@@ -95,8 +95,18 @@ echo "   -> 402 Payment Required; decode the payment-required header for the acc
 call() {
   local url="$1" label="$2"
   say "$label"
-  run "baz curl \"$url\" --account $ACCT --max-amount $MAX --yes --json | pp"
+  local out; out="$(baz curl "$url" --account "$ACCT" --max-amount "$MAX" --yes --json 2>&1)"
+  printf '\033[2m$ baz curl "%s" --account %s --json\033[0m\n' "$url" "$ACCT"
+  echo "$out" | pp
   echo "   ^ 'paid' is the x402 settlement record; watch Telegram: '↘ agent call … bazantic:<id>'"
+  # Finch reads its own payment off Base and confirms it on-chain.
+  local tx; tx="$(echo "$out" | python3 -c 'import sys,json
+try: print(json.load(sys.stdin).get("paid",{}).get("transaction","") or "")
+except Exception: print("")' 2>/dev/null)"
+  if [ -n "$tx" ]; then
+    say "   verify the payment on Base — Finch checks its own settlement"
+    run "curl -s \"$ENDPOINT/x402/verify?tx=$tx\" | pp"
+  fi
 }
 
 case "$STEP" in

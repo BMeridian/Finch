@@ -28,7 +28,9 @@ per-pool hooks are opaque to generic indexers and block explorers. Read-only.
 | `format` | query or JSON body | `json` (default) or `prose` |
 
 Other routes: `GET /health` (index freshness vs chain head), `GET /calls`
-(who has called Finch), `GET /SKILL.md` (this file), `GET /spec` (OpenAPI).
+(who has called Finch), `GET /x402/verify?tx=0x…` (reads a Bazantic x402
+settlement off Base and decodes the USDC transfer), `GET /SKILL.md` (this file),
+`GET /spec` (OpenAPI).
 Operator toggles for the call log: `GET /seeAgent` (full record — caller,
 question, latency), `GET /seeAgentMin` (terse), `GET /agentOff`.
 

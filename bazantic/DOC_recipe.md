@@ -49,6 +49,19 @@ A real $0.00001 USDC transfer on Base, on-chain, from the hosted balance. Finch
 logs it at `/calls` as `bazantic:<id>` and streams it to Telegram under
 `/seeAgent`. `bazDemo.sh` runs the whole flow — `BAZ_ACCOUNT=finch ./bazDemo.sh`.
 
+**Finch verifies its own settlement.** Bazantic doesn't forward payment details
+upstream, so Finch reads the tx off Base directly:
+
+```
+GET {BASE}/x402/verify?tx=<paid.transaction>
+-> { "verified": true, "amount_usdc": "0.000010", "network": "base",
+     "from": "0x…", "to": "0x…", "block": 51141772,
+     "explorer": "https://basescan.org/tx/0x58ccefd2…" }
+```
+
+It reads `eth_getTransactionReceipt` on Base, finds the USDC (`0x833589fC…`)
+`Transfer` log, and decodes it. `bazDemo.sh` chains this after every paid call.
+
 ## Register (two operator steps)
 
 Prereqs: `npm i -g @bazantic/cli`, `bazantic/openapi.json` written and served by

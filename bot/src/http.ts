@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { answerJson, answer } from "./answer.js"
 import { logCall, recentCalls, callStats, setSeeMode, seeMode } from "./calllog.js"
 import { freshness } from "./freshness.js"
+import { verifyPayment } from "./x402.js"
 
 // Finch's HTTP API — the thing the Bazantic x402/MPP Gateway wraps. Any agent
 // calls this directly too (Finch is a peer, not a gatekeeper). Every request is
@@ -42,6 +43,11 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/agentOff")     { setSeeMode("off");  return send(200, { call_logging: seeMode() }) }
 
   if (url.pathname === "/health") return send(200, await freshness().catch(e => ({ error: String(e) })))
+  if (url.pathname === "/x402/verify" || url.pathname === "/verify") {
+    const tx = url.searchParams.get("tx") || ""
+    if (!tx) return send(400, { error: "pass ?tx=0x… (the paid.transaction from baz curl --json)" })
+    return send(200, await verifyPayment(tx).catch(e => ({ error: String(e) })))
+  }
   if (url.pathname === "/SKILL.md" || url.pathname === "/skill") {
     try {
       const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || url.protocol.replace(":", "")
