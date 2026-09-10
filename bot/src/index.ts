@@ -22,6 +22,7 @@ const HELP = [
   "",
   "/process    how Finch works out an answer",
   "/forAgents  how agents call Finch (HTTP / MCP / Bazantic)",
+  "/bazRep     run the published Bazantic recipe (Finch → ENS, LLM-driven)",
   "",
   "",
   "① SET YOUR WALLET (once)",
