@@ -1,7 +1,7 @@
 import { Bot } from "grammy"
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import { answer } from "./answer.js"
-import { getWallet, setWallet, clearWallet, getMode, setMode } from "./session.js"
+import { getWallet, setWallet, clearWallet, getMode, setMode, getBazrep, setBazrep } from "./session.js"
 import { setSeeMode, seeMode, callStats, tailCalls, callLogSize, type CallRecord } from "./calllog.js"
 import { freshness } from "./freshness.js"
 import { pons25Text } from "./pons25.js"
@@ -123,14 +123,8 @@ bot.command("ping", (ctx) => ctx.reply("pong"))
 // /bazrep — run the PUBLISHED Bazantic recipe FINCH_GRAPH_ENS. Bazantic drives
 // an LLM that chains Finch's own paid gateway tools (finchQuery -> ensResolve)
 // and composes the answer. The bot is just another agent calling the recipe.
-bot.command(["bazrep", "bazrecipe"], async (ctx) => {
-  const m = (ctx.match ?? "").toString().match(/(0x[0-9a-fA-F]{40})(?:\s+([A-Za-z]{1,8}))?/)
-  if (!m) return ctx.reply(
-    "Usage: /bazrep 0x<wallet> [SYMBOL]\n\n" +
-    "Runs the published Bazantic recipe FINCH_GRAPH_ENS — an LLM that chains " +
-    "Finch provenance (Substreams) to ENS resolution (The Graph's ENS subgraph), " +
-    "each a paid gateway call. ~40s.")
-  const [, wallet, symbol] = m
+async function runBazrep(ctx: any, wallet: string, symbol?: string) {
+  setBazrep(ctx.chat.id, undefined)
   await ctx.replyWithChatAction("typing")
   await ctx.reply("Running Bazantic recipe <b>FINCH_GRAPH_ENS</b> … (LLM + 2 paid gateway calls, ~40s)", { parse_mode: "HTML" })
   try {
@@ -142,6 +136,17 @@ bot.command(["bazrep", "bazrecipe"], async (ctx) => {
   } catch (e) {
     await ctx.reply(`recipe failed: ${feedEsc(String(e))} — try again, the recipe gateway's upstream timeout is flaky`)
   }
+}
+
+bot.command(["bazrep", "bazrecipe"], async (ctx) => {
+  const m = (ctx.match ?? "").toString().match(/(0x[0-9a-fA-F]{40})(?:\s+([A-Za-z]{1,8}))?/)
+  if (m) return runBazrep(ctx, m[1], m[2])          // one-liner: /bazrep 0x… NVDA
+  setBazrep(ctx.chat.id, { step: "wallet" })         // guided: ask for the fields
+  return ctx.reply(
+    "Bazantic recipe: <b>FINCH_GRAPH_ENS</b>\n" +
+    "<i>Finch provenance (Substreams) → ENS names (The Graph) — LLM-driven, paid.</i>\n\n" +
+    "Wallet (0x…):",
+    { parse_mode: "HTML" })
 })
 
 function agentsText(): string {
@@ -311,6 +316,22 @@ bot.on("message:text", async (ctx) => {
   const q = ctx.message.text
   // never write wallet addresses to the journal
   console.log(`msg from @${ctx.from?.username ?? ctx.from?.id}: ${q.replace(/0x[0-9a-fA-F]{40}/g, "0x…")}`)
+
+  // /bazrep guided flow: collect Wallet then Symbol, then run the recipe
+  const br = getBazrep(ctx.chat.id)
+  if (br) {
+    const t = q.trim()
+    if (/^(cancel|stop|nvm|\/cancel)$/i.test(t)) { setBazrep(ctx.chat.id, undefined); return ctx.reply("Recipe cancelled.") }
+    if (br.step === "wallet") {
+      if (!ADDR.test(t)) return ctx.reply("Send a wallet address (0x… 40 hex), or 'cancel'.")
+      setBazrep(ctx.chat.id, { step: "symbol", wallet: t.toLowerCase() })
+      return ctx.reply("Symbol (send – for the default NVDA):")
+    }
+    if (br.step === "symbol") {
+      const sym = /^[–\-]$|^skip$|^default$/i.test(t) ? undefined : t.replace(/[^A-Za-z]/g, "").slice(0, 8).toUpperCase()
+      return runBazrep(ctx, br.wallet!, sym || undefined)
+    }
+  }
 
   // Call-log toggles — accept any casing, with or without the slash
   // (Telegram commands are case-sensitive, so /agentOff misses bot.command).

@@ -8,7 +8,8 @@ import { readFileSync, writeFileSync } from "node:fs"
 
 const FILE = new URL("../.session.json", import.meta.url).pathname
 type Mode = "wallet" | "launches"
-type Entry = { wallet?: string; mode?: Mode }
+type Bazrep = { step: "wallet" | "symbol"; wallet?: string }
+type Entry = { wallet?: string; mode?: Mode; bazrep?: Bazrep }
 type Store = Record<string, Entry>
 
 let store: Store = {}
@@ -22,3 +23,10 @@ export function clearWallet(id: number | string) { delete store[String(id)]; per
 
 export function getMode(id: number | string): Mode { return store[String(id)]?.mode ?? "wallet" }
 export function setMode(id: number | string, mode: Mode) { entry(id).mode = mode; persist() }
+
+// /bazrep guided flow — collect the recipe's inputs one at a time
+export function getBazrep(id: number | string): Bazrep | undefined { return store[String(id)]?.bazrep }
+export function setBazrep(id: number | string, b: Bazrep | undefined) {
+  if (b) entry(id).bazrep = b; else delete entry(id).bazrep
+  persist()
+}
