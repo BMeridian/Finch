@@ -14,7 +14,8 @@ const bot = new Bot(token)
 const ADDR = /^0x[0-9a-fA-F]{40}$/
 
 const HELP = [
-  "Finch — where your Robinhood Chain tokens came from.",
+  "Finch — a bird that listens in Sherwood Forest.",
+  "It snitches on where your tokens really came from.",
   "The Graph subgraph (Goldsky) · Uniswap V4 pools · callable via Bazantic.",
   "",
   "/process    how Finch works out an answer",
@@ -24,16 +25,16 @@ const HELP = [
   "① SET YOUR WALLET (once)",
   "   /account 0x…",
   "   try it:",
-  "   /account 0x2a58fb44f78d7b600aec945ba8cb253896793ed3",
   "   /account 0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0",
+  "   /account 0x36de68e810781dd7699d8fc7fe7def8aae51cec2",
   "",
-  "② ASK",
-  "   NVDA                     ← just the symbol",
-  "   why did I get NVDA?",
-  "   trace NVDA               ← adds the tx route + path",
-  "   (one-shot: paste an address and a symbol together)",
+  "② ASK:  why did I get NVDA?",
+  "   NVDA                ← just the symbol",
+  "   /trace NVDA         ← adds the tx route + path",
+  "   /traceENS NVDA      ← …+ ENS names for the wallets in the path",
   "",
   "   /forget   clear your wallet",
+  "   /start    reset",
   "",
   "PONS LAUNCHES",
   "   /launches                recent launches",
@@ -72,7 +73,8 @@ const PROCESS = [
   "",
   "WHAT THIS MISSES",
   "• Finch indexes transfers of 15 tokenized stocks (see /finchTop). A payout in any other asset isn't seen.",
-  "• Why your wallet, and not another holder, is in an epoch's batch — the selection rule is off-chain.",
+  "• Why your wallet, and not another holder, is in an epoch's batch — the selection rule is off-chain, the distributor's logic is unverified source, and entry is claim-gated.",
+  "• Recurrence counts (\"37×\") are within Finch's indexed range — earlier receipts may exist before it.",
   "• A project can fund payouts by buying the asset with its treasury, with no pool ever pairing it against that asset — invisible to this method.",
   "• Off-chain / other-rollup treasuries are invisible to Finch.",
   "• Non-Pons launchpads (lunch.fun, etc.) are not yet indexed.",
@@ -81,7 +83,9 @@ const PROCESS = [
 ].join("\n")
 
 const AGENTS = [
-  "Finch for agents — same backend as this bot, three ways in.",
+  "Finch — curated access to Robinhood Chain data. Same backend as this bot, three ways in.",
+  "",
+  "The Graph Network doesn't index Robinhood Chain; Finch does — standard subgraph schema + GraphQL, so agents query it with tooling they already have. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands in. Finch decodes the last hop, the hard part — V4's singleton PoolManager and per-pool hooks (here, a Meme Hook) are opaque to generic indexers and block explorers.",
   "",
   "1. HTTP API",
   "Base: {BASE}",
@@ -101,6 +105,10 @@ const AGENTS = [
   "Every response carries confidence: \"signal only - not a recommendation\". Candidate tokens are correlational, never causal — and the true source can be absent entirely (treasury buys the asset and airdrops it). Only Pons is indexed; for status see /health.",
   "",
   "Full manifest: {BASE}/SKILL.md",
+  "",
+  "Watch it happen — turn on a live feed of agent calls in this chat:",
+  "/seeAgent — full record (caller, question, answer)",
+  "/agentOff — stop",
 ].join("\n")
 
 bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP) })
@@ -119,7 +127,7 @@ bot.command("account", (ctx) => {
   if (!arg) {
     const w = getWallet(ctx.chat.id)
     return ctx.reply(w ? `Your wallet is set to ${w}. Ask me why you received a token, or /forget to clear it.`
-                       : "No wallet set. Use /account 0x… to set one.")
+      : "No wallet set. Use /account 0x… to set one.")
   }
   if (!ADDR.test(arg)) return ctx.reply("That doesn't look like a wallet address. Use /account 0x… (40 hex chars).")
   setWallet(ctx.chat.id, arg)
@@ -127,6 +135,25 @@ bot.command("account", (ctx) => {
 })
 
 bot.command(["forget", "clear"], (ctx) => { clearWallet(ctx.chat.id); return ctx.reply("Wallet cleared.") })
+
+// /trace NVDA — the confirmed route for a received token.
+// /traceENS NVDA — same, plus resolve the addresses to ENS names (chained: the
+// Finch answer's addresses feed a forward-record lookup on The Graph Network's
+// canonical ENS subgraph).
+async function replyTrace(ctx: any, withEns: boolean) {
+  const w = getWallet(ctx.chat.id)
+  if (!w) return ctx.reply("Set your wallet first: /account 0x…")
+  const sym = (ctx.match ?? "").toString().trim()
+  if (!sym) return ctx.reply(`Usage: /${withEns ? "traceENS" : "trace"} NVDA — the token symbol you want the route for.`)
+  await ctx.replyWithChatAction("typing")
+  const q = `trace ${sym}${withEns ? " and resolve the addresses to ENS names" : ""}`
+  return ctx.reply(await answer(q, w, "wallet"),
+    { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
+}
+// Menu commands must be lowercase (Telegram setMyCommands rejects uppercase),
+// but a manually-typed command is delivered verbatim — so match any casing.
+bot.hears(/^\/trace(ns|ens)\b(?:@\w+)?\s*(.*)$/i, (ctx) => { ctx.match = ctx.match?.[2] ?? ""; return replyTrace(ctx, true) })
+bot.hears(/^\/trace\b(?:@\w+)?\s*(.*)$/i, (ctx) => { ctx.match = ctx.match?.[1] ?? ""; return replyTrace(ctx, false) })
 
 bot.command(["health", "status"], async (ctx) => {
   try {
@@ -180,8 +207,8 @@ const seeAgentReply = (mode: "min" | "full") =>
     : "Agent calls: ON (caller, question, latency). New calls appear here. /agentOff to stop."
 
 bot.command(["seeagent", "seeagentfull"], (ctx) => { setSeeMode("full"); startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("full")) })
-bot.command("seeagentmin",                (ctx) => { setSeeMode("min");  startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("min")) })
-bot.command("agentoff",                   (ctx) => { setSeeMode("off");  writeWatch(null); return ctx.reply("Agent calls: OFF.") })
+bot.command("seeagentmin", (ctx) => { setSeeMode("min"); startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("min")) })
+bot.command("agentoff", (ctx) => { setSeeMode("off"); writeWatch(null); return ctx.reply("Agent calls: OFF.") })
 
 function trimAnswer(a: string, keep = 3): string {
   const lines = a.split("\n")
@@ -198,15 +225,18 @@ function trimAnswer(a: string, keep = 3): string {
   return s.length > 1200 ? s.slice(0, 1200) + " …" : s
 }
 
+// feed messages go out with parse_mode "HTML" — escape all dynamic text
+const feedEsc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
 function fmtCall(r: CallRecord, mode: "min" | "full"): string {
   const t = r.ts.slice(11, 19) + "Z"
-  const caller = r.caller || "anonymous"
+  const caller = feedEsc(r.caller || "anonymous")
   if (mode === "min") return `↘ agent call  ${t}  ${caller}  ${r.ok ? "ok" : "err"}`
   const bits = [`↘ agent call  ${t}  ${caller}`]
-  if (r.wallet) bits.push(`   wallet ${r.wallet}`)
-  if (r.question) bits.push(`   q: ${r.question}`)
+  if (r.wallet) bits.push(`   wallet ${feedEsc(r.wallet)}`)
+  if (r.question) bits.push(`   q: <b>${feedEsc(r.question)}</b>`)
   bits.push(`   ${r.format} · ${r.took_ms}ms · ${r.ok ? "ok" : "err"}`)
-  if (r.answer) bits.push("", "answer: " + trimAnswer(r.answer))
+  if (r.answer) bits.push("", "answer: " + feedEsc(trimAnswer(r.answer)))
   return bits.join("\n")
 }
 
@@ -218,13 +248,17 @@ async function pumpWatch() {
   if (offset !== w.offset) writeWatch({ ...w, offset })
   for (const r of records) {
     if (r.route !== "/query") continue
+    // the feed is "proof of real agent calls" — skip price probes (no wallet,
+    // no question) and error responses; they read as noise on a demo.
+    if (!r.wallet && !r.question) continue
+    if (!r.ok || /^\{"error"/.test(r.answer ?? "")) continue
     try {
-      await bot.api.sendMessage(w.chatId, fmtCall(r, mode === "full" ? "full" : "min"))
+      await bot.api.sendMessage(w.chatId, fmtCall(r, mode === "full" ? "full" : "min"), { parse_mode: "HTML" })
       console.log(`feed -> chat ${w.chatId}: ${r.caller} ${r.question || "-"}`)
     } catch (e) { console.error("feed send failed:", e) }
   }
 }
-setInterval(() => { pumpWatch().catch(() => {}) }, 2500)
+setInterval(() => { pumpWatch().catch(() => { }) }, 2500)
 
 const PONS25_RE = /^\s*pons\s*25\s*$/i
 const FINCHTOP_RE = /^\s*finch\s*top\s*$/i
@@ -238,9 +272,9 @@ bot.on("message:text", async (ctx) => {
   // Call-log toggles — accept any casing, with or without the slash
   // (Telegram commands are case-sensitive, so /agentOff misses bot.command).
   const bt = q.trim().replace(/^\//, "")
-  if (/^see\s?agent\s?min$/i.test(bt))      { setSeeMode("min");  startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("min")) }
-  if (/^see\s?agent(\s?full)?$/i.test(bt))  { setSeeMode("full"); startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("full")) }
-  if (/^agent\s?off$/i.test(bt))            { setSeeMode("off");  writeWatch(null); return ctx.reply("Agent calls: OFF.") }
+  if (/^see\s?agent\s?min$/i.test(bt)) { setSeeMode("min"); startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("min")) }
+  if (/^see\s?agent(\s?full)?$/i.test(bt)) { setSeeMode("full"); startWatching(ctx.chat.id); return ctx.reply(seeAgentReply("full")) }
+  if (/^agent\s?off$/i.test(bt)) { setSeeMode("off"); writeWatch(null); return ctx.reply("Agent calls: OFF.") }
 
   // A message that is ONLY an address just sets the wallet — same as /account.
   const bare = q.trim()
@@ -283,17 +317,19 @@ bot.catch((err) => console.error("bot error:", err))
 
 const MENU = [
   { command: "start", description: "Reset and show the intro" },
-  { command: "account", description: "Set your wallet: /account 0x…" },
-  { command: "forget", description: "Clear the saved wallet" },
-  { command: "launches", description: "Recent Pons launches (add a symbol to filter)" },
-  { command: "grads", description: "Graduated tokens on Uniswap V4 (add a symbol)" },
-  { command: "finchtop", description: "The tokens Finch tracks" },
-  { command: "pons25", description: "The Pons25 basket" },
-  { command: "health", description: "Subgraph freshness vs chain head" },
   { command: "process", description: "How Finch answers “why did I get this token?”" },
   { command: "foragents", description: "HTTP API / MCP / Bazantic access" },
+  { command: "pons25", description: "The Pons25 basket" },
+  { command: "finchtop", description: "The tokens Finch tracks" },
+  { command: "account", description: "Set your wallet: /account 0x…" },
+  { command: "forget", description: "Clear the saved wallet" },
+  { command: "trace", description: "Confirmed route for a received token: /trace NVDA" },
+  { command: "traceens", description: "/trace + resolve the addresses to ENS names" },
+  { command: "launches", description: "Recent Pons launches (add a symbol to filter)" },
+  { command: "grads", description: "Graduated tokens on Uniswap V4 (add a symbol)" },
   { command: "seeagent", description: "Live feed of agent calls (on)" },
   { command: "agentoff", description: "Turn the agent-call feed off" },
+  { command: "health", description: "Subgraph freshness vs chain head" },
 ]
 
 async function main() {

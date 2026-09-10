@@ -147,9 +147,6 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     // not a per-holder rate: recipient selection each epoch is a claim-gated
     // subset and the distributor's logic contract is unverified source.
     const onPath = !!(c && c.quoteToken === r.token)
-    const fns = c && c.functions.length
-      ? [...new Set(c.functions.map(f => f.split("(")[0] + "()"))].join(", ")
-      : ""
 
     // correlational candidates (only surfaced when the path can't be confirmed)
     const cands = (await candidatesFor(r.to, r.token).catch(() => [] as { symbol: string; address: string }[]))
@@ -182,32 +179,34 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     // ---- trace ----
     const kw = await txCall(r.txHash).catch(() => null)
     const MULTICALL3 = "0xca11bde05977b3631167028862be2a173976ca11"
-    const via = kw
-      ? kw.to === MULTICALL3 ? `keeper ${shortAddr(kw.from)} → Multicall3 → ` : `${shortAddr(kw.from)} → `
+    const relay = kw
+      ? kw.to === MULTICALL3
+        ? `  → keeper ${shortAddr(kw.from)}\n  → Multicall3\n`
+        : `  → keeper ${shortAddr(kw.from)}\n`
       : ""
 
     let body: string
     if (onPath && c) {
-      const distLabel = c.managerRegistered
-        ? `Pons holder-fee distributor for ${esc(c.symbol)}  (PonsHolderFeeManager.distributorOf(${esc(c.symbol)}) == this)`
-        : `per-token fee distributor  (token()=${esc(c.symbol)}, quoteToken()=${symbol})`
+      const distLabel = c.managerRegistered ? `Pons holder-fee distributor` : `per-token fee distributor`
+      const distFacts = [
+        c.managerRegistered ? "" : `token()=${esc(c.symbol)} · quoteToken()=${symbol}`,
+        c.epochs ? `epochCount()=${c.epochs}` : "",
+        `claim-gated, per epoch`,
+      ].filter(Boolean).join(" · ")
       body =
         `<b>PATH</b>\n\n` +
         `  ${esc(c.symbol)} / ${symbol} Uniswap V4 pool (behind the Pons Meme Hook)\n` +
-        `    ${esc(c.symbol)}'s creator-fee cut is taken in ${symbol}\n` +
+        `    creator-fee cut is taken in ${symbol}\n` +
         `  → Pons FeeEscrow  ${FEE_ESCROW}\n` +
-        `  → ${shortAddr(D)}\n` +
-        `    ${distLabel}\n` +
-        (c.epochs ? `    epochCount()=${c.epochs}\n` : "") +
-        (fns ? `    exposes ${fns} — claim-gated, per epoch\n` : "") +
+        `  → ${distLabel}  ${shortAddr(D)}\n` +
+        `    ${distFacts}\n` +
         (c.refsPoolManager
-          ? `    logic references the Uniswap V4 PoolManager (${shortAddr(POOL_MANAGER)})\n`
+          ? `    logic reads the Uniswap V4 PoolManager (${shortAddr(POOL_MANAGER)})\n`
           : "") +
-        `  → ${via}this wallet + ${n} others, one epoch batch\n\n` +
-        `Which addresses are in a given epoch's batch is not on-chain-readable ` +
-        `(the distributor's distribution logic is unverified source).\n\n` +
+        relay +
+        `  → this wallet + ${n} others, one epoch batch\n\n` +
         (c.description ? `${esc(c.symbol)} About (on-chain, immutable): "${esc(c.description)}"\n\n` : "") +
-        `Recurring — ${recStr}` + (recTx.length ? `, first at block ${parseInt(recTx[0].block, 10)}` : "") + `.`
+        `Recurring — ${recN}×.`
     } else {
       const list = cands.slice(0, 5).map(x => `  ${esc(x.symbol)}  ${x.address}`).join("\n")
       const reason = stale
@@ -218,7 +217,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
         `<b>NOT CONFIRMED</b>\n\n` +
         `Contract ${D}${c ? ` has token()=${esc(c.symbol)}, quoteToken()=${esc(pairLabel(c.quoteToken))}` : ""}. ${reason}\n\n` +
         (cands.length ? `${symbol}-paired tokens this wallet has touched (correlation only):\n${list}\n\n` : "") +
-        `Recurring — ${recStr}.`
+        `Recurring — ${recN}×.`
     }
 
     return `<b>FACT</b>\n` +
