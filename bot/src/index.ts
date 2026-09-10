@@ -288,9 +288,11 @@ async function pumpWatch() {
   for (const r of records) {
     if (r.route !== "/query") continue
     // the feed is "proof of real agent calls" — skip price probes (no wallet,
-    // no question) and error responses; they read as noise on a demo.
+    // no question), error responses, and localhost callers (internal plumbing:
+    // the /bazrep recipe's own finchQuery hop, local curl testing).
     if (!r.wallet && !r.question) continue
     if (!r.ok || /^\{"error"/.test(r.answer ?? "")) continue
+    if (r.caller === "::1" || r.caller === "127.0.0.1" || r.caller === "anonymous") continue
     try {
       let msg = fmtCall(r, mode === "full" ? "full" : "min")
       if (r.caller.startsWith("bazantic:")) {
