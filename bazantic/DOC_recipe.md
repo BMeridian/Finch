@@ -9,15 +9,30 @@ calls, and the Telegram bot / MCP server are other consumers of it.
 `<BASE>` below = Finch's deployed https URL (`FINCH_PUBLIC_URL` in `.env`; the
 live value and the registered gateway slug are in `DOC_box.local.md`).
 
-## Status
+## Status — done
 
 Gateway **registered and active** — slug `ui7avlwzinb2bixwluy64t26ia`,
-`https://ui7avlwzinb2bixwluy64t26ia.bazgateway.com`. Routes proxy correctly
-(Bazantic Fly infra → Caddy → box → real answers).
+`https://ui7avlwzinb2bixwluy64t26ia.bazgateway.com`. Proxies real
+Substreams-backed answers (Bazantic Fly infra → Caddy → box).
 
-**Open:** `pricing` is still `null` — the `/query` route proxies at plain `200`,
-no x402 handshake. Set it to **x402 / amount 0** in the dashboard wizard (below)
-to make it a metered $0.00 call. The steps below are the reproduction recipe.
+`/query` is priced at **1 MCENT = $0.00001** and issues a spec-compliant x402
+challenge:
+
+```
+$ curl -s -i "$GW/query?wallet=0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0" | head
+HTTP/2 402
+payment-required: <base64>   # x402 v2 · scheme exact · network eip155:8453 (Base)
+                             # · asset 0x833589fC… (USDC) · amount "10" · payTo 0xDE05E390…
+www-authenticate: Payment id="…", realm="gateway", method="tempo", …
+```
+
+A bare `/query` (no params) is a no-op probe and passes through at 200 — send a
+real param to see the 402.
+
+**To actually settle** ($0.00001/call), the calling agent funds a payer: USDC on
+Base in `baz wallet address`, or a `baz grant` off a Bazantic hosted balance.
+That's the agent's concern, not the gateway operator's — the recipe ends at "the
+gateway issues the challenge."
 
 ## Register (two operator steps)
 

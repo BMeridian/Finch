@@ -71,24 +71,26 @@ echo "   endpoint: $ENDPOINT"
 echo "   (no Finch API key, no Robinhood-Chain RPC, no subgraph URL)"
 [ "$STEP" = all ] && pause
 
-# --- 2. INSPECT the priced route ---
-# The /query resource is priced (1 MCENT = $0.00001) in the Bazantic dashboard.
-# NOTE: as of this writing the published gateway still proxies at 200 without
-# emitting the x402 402 challenge (baz curl reports `paid: null`) — a Bazantic
-# platform issue under investigation. The pricing config is staged; when it
-# engages this call returns `402 Payment Required` + an `accepts` block.
-say "2. INSPECT — the priced /query resource"
-run "curl -s -i \"$ENDPOINT/query\" | sed -n '1,20p'"
-echo "   -> priced at \$0.00001/call in the gateway config"
+# --- 2. READ THE x402 CHALLENGE ---
+# GET the priced route with a real param (a bare /query is a no-op probe and
+# passes through). The gateway answers 402 with a `payment-required` header:
+# x402 v2, scheme exact, network Base (eip155:8453), asset USDC, amount "10"
+# (= $0.00001), payTo, maxTimeoutSeconds.
+say "2. INSPECT — the x402 payment challenge (HTTP 402)"
+run "curl -s -i \"$ENDPOINT/query?wallet=$WALLET\" | sed -n '1,12p'"
+echo "   -> 402 Payment Required; decode the payment-required header for the accepts block"
 [ "$STEP" = all ] && pause
 
-# --- 3. CALL VIA baz curl: settles an x402 402 if present, else plain proxy ---
+# --- 3. PAY-PER-CALL: baz curl settles the 402 and retries ---
+# Needs a funded payer: USDC on Base in `baz wallet address` (a few cents covers
+# thousands of calls at $0.00001), or a `baz grant` off a hosted balance. With an
+# empty wallet this returns {"ok":false,"error":"payment_rejected"} and its
+# `detail` still shows the full accepts block.
 call() {
   local url="$1" label="$2"
   say "$label"
   run "baz curl \"$url\" --account wallet --max-amount $MAX --yes --json | pp"
-  echo "   ^ 'paid' shows the x402 settlement (null while the 402 isn't engaging);"
-  echo "     watch the Telegram chat: '↘ agent call … bazantic:<id>'"
+  echo "   ^ 'paid' is the x402 settlement record; watch Telegram: '↘ agent call … bazantic:<id>'"
 }
 
 case "$STEP" in
