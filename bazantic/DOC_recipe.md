@@ -178,11 +178,12 @@ Inputs: a wallet address {{inputs.wallet}} and a token symbol {{inputs.symbol}}
    event.paid_by_contract, and each 0x in path.route.
 3. Call ensResolve with addresses=<that list>. Returns `resolved` (address -> .eth
    names) and `unresolved` (Robinhood Chain contracts, no name).
-4. Answer: one line "<wallet .eth or short 0x> received <amount> <token>, routed
-   through <payer .eth or short 0x>", then each route address -> its .eth name(s)
-   or "no ENS name".
+4. Answer, nothing else: one line "<wallet .eth or short 0x> received <amount>
+   <token>, routed through <payer .eth or short 0x>", then each route address ->
+   its .eth name(s) or "no ENS name". No preamble, no notes, no confidence or
+   disclaimer paragraph — Finch's JSON already carries that and the caller strips it.
 
-Never give trading advice. Preserve confidence: "signal only - not a recommendation".
+Never give trading advice.
 ```
 
 **Verified run** — `wallet=0x36de68e810781dd7699d8fc7fe7def8aae51cec2`:

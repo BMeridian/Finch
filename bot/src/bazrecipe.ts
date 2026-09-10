@@ -62,7 +62,7 @@ export async function runFinchGraphEns(wallet: string, symbol?: string): Promise
 // trailing confidence paragraph, `---` rules. Strip all of it.
 function tidy(s: string): string {
   let t = s
-  const cut = t.search(/\n[ \t]*[*_#>-]*[ \t]*(note[ :]|confidence|disclaimer|caveat|signal only|not a recommendation)/i)
+  const cut = t.search(/\n[ \t]*[*_#>-]*[ \t]*(important[ :_*]*note|note[ :]|confidence|disclaimer|caveat|signal only|not a recommendation)/i)
   if (cut > 0) t = t.slice(0, cut)
   t = t
     .replace(/^\s*(perfect|great|got it|here('?s| are| is)|now i (have|can)|the (results?|answer)|summary)\b[^\n]*\n+/im, "")
