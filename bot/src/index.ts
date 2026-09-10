@@ -145,7 +145,7 @@ bot.command(["bazrep", "bazrecipe"], async (ctx) => {
   return ctx.reply(
     "Bazantic recipe: <b>FINCH_GRAPH_ENS</b>\n" +
     "<i>Finch provenance (Substreams-indexed Pons → Uniswap V4 route) → ENS names " +
-    "(The Graph's ENS subgraph) — LLM-driven, each step a paid gateway call.</i>\n\n" +
+    "(The Graph's ENS subgraph) — LLM-driven, a paid gateway call.</i>\n\n" +
     "Wallet (0x…):",
     { parse_mode: "HTML" })
 })
