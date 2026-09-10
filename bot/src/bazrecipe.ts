@@ -65,7 +65,8 @@ function tidy(s: string): string {
   const cut = t.search(/\n[ \t]*[*_#>-]*[ \t]*(important[ :_*]*note|note[ :]|confidence|disclaimer|caveat|signal only|not a recommendation)/i)
   if (cut > 0) t = t.slice(0, cut)
   t = t
-    .replace(/^\s*(perfect|great|got it|here('?s| are| is)|now i (have|can)|the (results?|answer)|summary)\b[^\n]*\n+/im, "")
+    .replace(/^[ \t]*[*_#>]*[ \t]*(perfect|great|got it|here('?s| are| is)|now i (have|can)|the (results?|answer)|summary)\b[^\n]*[*_:]*[ \t]*\n+/im, "")
+    .replace(/^[ \t]*[*_#>]*[ \t]*(summary|route details|details|breakdown)[*_: \t]*\n+/gim, "")  // lone bold section headers
     .replace(/^[-*_\s]*\n+/, "")           // leading rule / blank
     .replace(/\n[-*_\s]*$/g, "")           // trailing rule
     .trim()
