@@ -5,8 +5,12 @@
 # /seeAgentFull active. Each call here lands in the chat as "↘ agent call …".
 #
 # It plays a cold agent: discover Finch through the gateway, read the x402
-# price challenge, then pay-per-call and get structured provenance back —
-# no Finch key, no Robinhood-Chain RPC.
+# price challenge, then pay-per-call ($0.00001 USDC on Base, real on-chain) and
+# get structured provenance back — no Finch key, no Robinhood-Chain RPC.
+#
+# To settle, pay from a grant off the Bazantic hosted balance:
+#   baz grant create --name finch --cap 0.10
+#   BAZ_ACCOUNT=finch ./bazDemo.sh all NVDA
 #
 #   ./bazDemo.sh                     # full run (token defaults to NVDA)
 #   ./bazDemo.sh wallet              # wallet-provenance call (default fixture)

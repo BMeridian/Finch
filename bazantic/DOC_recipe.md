@@ -29,10 +29,25 @@ www-authenticate: Payment id="…", realm="gateway", method="tempo", …
 A bare `/query` (no params) is a no-op probe and passes through at 200 — send a
 real param to see the 402.
 
-**To actually settle** ($0.00001/call), the calling agent funds a payer: USDC on
-Base in `baz wallet address`, or a `baz grant` off a Bazantic hosted balance.
-That's the agent's concern, not the gateway operator's — the recipe ends at "the
-gateway issues the challenge."
+**Settlement — the calling agent's side, verified working:**
+
+```bash
+baz grant create --name finch --cap 0.10      # authorize this device off the
+                                              # Bazantic hosted balance (browser approve)
+baz curl "$GW/query?wallet=0x2408ce75…&format=prose" --account finch --yes --json
+```
+→
+```json
+{ "ok": true, "status": 200,
+  "paid": { "amountUsd": "0.00001", "network": "base",
+            "transaction": "0x58ccefd2…3752848",
+            "explorerUrl": "https://basescan.org/tx/0x58ccefd2…" },
+  "body": { "answer": "This wallet received 0.0647 NVDA … 1 of 50 recipients …" } }
+```
+
+A real $0.00001 USDC transfer on Base, on-chain, from the hosted balance. Finch
+logs it at `/calls` as `bazantic:<id>` and streams it to Telegram under
+`/seeAgent`. `bazDemo.sh` runs the whole flow — `BAZ_ACCOUNT=finch ./bazDemo.sh`.
 
 ## Register (two operator steps)
 
