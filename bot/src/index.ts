@@ -22,7 +22,6 @@ const HELP = [
   "",
   "/process    how Finch works out an answer",
   "/forAgents  how agents call Finch (HTTP / MCP / Bazantic)",
-  "/bazRep     run the published Bazantic recipe (Finch → ENS, LLM-driven)",
   "",
   "",
   "① SET YOUR WALLET (once)",
@@ -113,6 +112,9 @@ const AGENTS = [
   "Watch it happen — turn on a live feed of agent calls in this chat:",
   "/seeAgent — full record (caller, question, answer)",
   "/agentOff — stop",
+  "",
+  "/bazRep — run the published Bazantic recipe FINCH_GRAPH_ENS in this chat",
+  "  (LLM chains finchQuery -> ensResolve; guided prompts, or /bazRep 0x… NVDA)",
 ].join("\n")
 
 bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP) })
