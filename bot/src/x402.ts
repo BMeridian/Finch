@@ -5,6 +5,9 @@
 const BASE_RPC = process.env.BASE_RPC_URL || "https://mainnet.base.org"
 const USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"          // USDC on Base
 const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" // Transfer(address,address,uint256)
+// The gateway's x402 payTo (from the 402 `accepts` block). Bazantic settles the
+// metered call here on Base; this is how the Telegram feed surfaces the payment.
+const PAY_TO = (process.env.X402_PAY_TO || "0xDE05E390e48c7a88B22dFE6B0005F70164F262aF").toLowerCase()
 
 const rpc = async (method: string, params: unknown[]) => {
   const r = await fetch(BASE_RPC, {
@@ -30,6 +33,26 @@ export interface X402Verify {
   status: "success" | "reverted" | "pending" | "not_found"
   explorer: string
   note: string
+}
+
+// Most recent USDC settlement to the gateway payTo on Base — used by the
+// Telegram feed to annotate a `bazantic:` call with what it paid. At demo pace
+// (one call at a time) this is that call's payment.
+export async function latestSettlement(): Promise<{ amount_usdc: string; tx: string; block: number } | null> {
+  const head = parseInt(await rpc("eth_blockNumber", []), 16)
+  const logs = await rpc("eth_getLogs", [{
+    fromBlock: "0x" + Math.max(0, head - 300).toString(16),   // ~10 min of Base
+    toBlock: "latest",
+    address: USDC,
+    topics: [TRANSFER_TOPIC, null, "0x000000000000000000000000" + PAY_TO.slice(2)],
+  }]).catch(() => null)
+  if (!logs?.length) return null
+  const l = logs[logs.length - 1]
+  return {
+    amount_usdc: (Number(BigInt(l.data)) / 1e6).toFixed(6),
+    tx: l.transactionHash,
+    block: parseInt(l.blockNumber, 16),
+  }
 }
 
 export async function verifyPayment(txHash: string): Promise<X402Verify> {

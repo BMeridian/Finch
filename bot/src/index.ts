@@ -6,6 +6,7 @@ import { setSeeMode, seeMode, callStats, tailCalls, callLogSize, type CallRecord
 import { freshness } from "./freshness.js"
 import { pons25Text } from "./pons25.js"
 import { finchTopText, coverageText } from "./lists.js"
+import { latestSettlement } from "./x402.js"
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 if (!token) { console.error("TELEGRAM_BOT_TOKEN missing (expected in ../.env)"); process.exit(1) }
@@ -253,7 +254,16 @@ async function pumpWatch() {
     if (!r.wallet && !r.question) continue
     if (!r.ok || /^\{"error"/.test(r.answer ?? "")) continue
     try {
-      await bot.api.sendMessage(w.chatId, fmtCall(r, mode === "full" ? "full" : "min"), { parse_mode: "HTML" })
+      let msg = fmtCall(r, mode === "full" ? "full" : "min")
+      if (r.caller.startsWith("bazantic:")) {
+        // Bazantic sends no payment header — read the x402 settlement off Base.
+        const s = await latestSettlement().catch(() => null)
+        const paid = s
+          ? `   💸 <b>$${(+s.amount_usdc).toString()}</b> x402 · tx ${feedEsc(s.tx.slice(0, 10) + "…" + s.tx.slice(-6))} (Base)`
+          : `   💸 <b>$0.00001</b> x402 (Base)`
+        msg = msg.includes("\n") ? msg.replace("\n", "\n" + paid + "\n") : msg + "\n" + paid
+      }
+      await bot.api.sendMessage(w.chatId, msg, { parse_mode: "HTML" })
       console.log(`feed -> chat ${w.chatId}: ${r.caller} ${r.question || "-"}`)
     } catch (e) { console.error("feed send failed:", e) }
   }
