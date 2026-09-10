@@ -3,7 +3,7 @@
 **What it does:** answers factual questions about where a Robinhood Chain
 (EVM chain 4663) wallet's tokens came from, and about Pons launchpad activity.
 The Graph Network doesn't index Robinhood Chain; Finch does — a pure Substreams
-pipeline (Pinax Firehose → `substreams sink postgres` → Postgres) indexing the
+pipeline (StreamingFast Substreams endpoint → `substreams sink postgres` → Postgres) indexing the
 Pons launch factory, the Uniswap V4 PoolManager (pools behind Pons's Meme Hook),
 and tokenized-stock transfers — plus live on-chain contract reads. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands
 in; Finch decodes the last hop, the hard part — V4's singleton PoolManager and

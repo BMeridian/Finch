@@ -3,7 +3,7 @@
   "info": {
     "title": "Finch",
     "version": "0.1.0",
-    "description": "Read-only provenance and Pons launchpad data for Robinhood Chain (EVM 4663). Where a wallet's tokens came from; recent Pons launches; graduation status. Backed by a pure Substreams pipeline (Pinax -> Postgres) indexing the Pons launch factory and the Uniswap V4 PoolManager. No trading, scoring, or recommendations - every response carries confidence: 'signal only - not a recommendation'."
+    "description": "Read-only provenance and Pons launchpad data for Robinhood Chain (EVM 4663). Where a wallet's tokens came from; recent Pons launches; graduation status. Backed by a pure Substreams pipeline (StreamingFast endpoint -> Postgres) indexing the Pons launch factory and the Uniswap V4 PoolManager. No trading, scoring, or recommendations - every response carries confidence: 'signal only - not a recommendation'."
   },
   "servers": [
     {

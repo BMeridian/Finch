@@ -34,7 +34,6 @@ const HELP = [
   "   NVDA                ← just the symbol",
   "   /trace NVDA         ← adds the tx route + path",
   "   /traceENS NVDA      ← …+ ENS names for the wallets in the path",
-  "   /bazrep 0x… NVDA    ← run it as a paid Bazantic recipe (LLM-driven)",
   "",
   "   /forget   clear your wallet",
   "   /start    reset",
@@ -88,22 +87,23 @@ const PROCESS = [
 const AGENTS = [
   "Finch — curated access to Robinhood Chain data. Same backend as this bot, three ways in.",
   "",
-  "The Graph Network doesn't index Robinhood Chain; Finch does — a pure Substreams pipeline (thegraph.market endpoint) sinking to Postgres. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands in. Finch decodes the last hop, the hard part — V4's singleton PoolManager and per-pool hooks (here, a Meme Hook) are opaque to generic indexers and block explorers.",
+  "The Graph Network doesn't index Robinhood Chain; Finch does — a pure Substreams pipeline (StreamingFast endpoint via thegraph.market) sinking to Postgres. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands in. Finch decodes the last hop, the hard part — V4's singleton PoolManager and per-pool hooks (here, a Meme Hook) are opaque to generic indexers and block explorers.",
   "",
   "1. HTTP API",
   "Base: {BASE}",
   "",
   "/query?wallet=0x…&q=<question>&format=json|prose",
   "— GET or POST; ask why a wallet received a token",
-  "/health — subgraph freshness vs chain head",
+  "/ens?addresses=0x…,0x… — reverse-resolve to .eth via The Graph's ENS subgraph",
+  "/health — index freshness vs chain head",
   "/calls — who has called Finch (proof of real agent calls)",
   "/SKILL.md and /spec — manifest + OpenAPI",
   "",
   "2. MCP server (stdio) — Claude Code / Desktop / Cursor",
   "Tools: finch_wallet_provenance, finch_pons_activity, finch_health",
   "",
-  "3. Bazantic gateway (x402/MPP, metered)",
-  "Wraps the /query endpoint above.",
+  "3. Bazantic gateway (x402/MPP, metered on Base)",
+  "Wraps /query + /ens. A published Bazantic Recipe, FINCH_GRAPH_ENS, chains them.",
   "",
   "Every response carries confidence: \"signal only - not a recommendation\". Candidate tokens are correlational, never causal — and the true source can be absent entirely (treasury buys the asset and airdrops it). Only Pons is indexed; for status see /health.",
   "",
@@ -197,8 +197,8 @@ bot.command(["health", "status"], async (ctx) => {
     const s = callStats()
     return ctx.reply(
       `Substreams sink (StreamingFast → Postgres): block ${f.subgraph_block} · chain ${f.chain_block}\n` +
-      `Lag: ${f.lag_blocks.toLocaleString()} blocks (~${Math.round(f.lag_seconds / 60)} min) · ${f.fresh ? "fresh" : "backfilling"}\n` +
-      `Indexing: Pons launch factory + Uniswap V4 PoolManager + stock-token transfers\n` +
+      `Lag: ${f.lag_blocks.toLocaleString()} blocks (~${Math.round(f.lag_seconds / 60)} min) · ${f.fresh ? "keeping pace" : "catching up"}\n` +
+      `Indexing: Pons launch factory + graduations + Uniswap V4 pool inits + stock-token transfers\n` +
       `Agents: ${s.total} calls logged (${seeMode()}) · live on the Bazantic gateway`)
   } catch (e) {
     return ctx.reply(`Health check failed: ${e}`)
@@ -399,7 +399,8 @@ const MENU = [
   { command: "grads", description: "Graduated tokens on Uniswap V4 (add a symbol)" },
   { command: "seeagent", description: "Live feed of agent calls (on)" },
   { command: "agentoff", description: "Turn the agent-call feed off" },
-  { command: "health", description: "Subgraph freshness vs chain head" },
+  { command: "bazrep", description: "Run the published Bazantic recipe (Finch → ENS)" },
+  { command: "health", description: "Index freshness vs chain head" },
 ]
 
 async function main() {

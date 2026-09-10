@@ -54,7 +54,7 @@ server.tool(
 
 server.tool(
   "finch_health",
-  "Check Finch's subgraph freshness — indexed block vs chain head.",
+  "Check Finch's index freshness — indexed block vs chain head.",
   {},
   async () => {
     const res = await fetch(`${BASE}/health`, { headers: { "x-agent-id": "mcp" } })
