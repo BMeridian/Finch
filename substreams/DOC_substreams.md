@@ -67,36 +67,33 @@ substreams 1.22.0 · rustc 1.93.1 + wasm32-unknown-unknown · buf 1.72.0 · prot
 `graph/` and `graph_out` are dead. The live path is the folded-in SQL sink:
 
 ```
+# token: a thegraph.market Substreams token (FREE tier, 5 workers). Its endpoint
+# for this chain is mainnet.robinhood.streamingfast.io:443 (Pinax's own free keys
+# hit concurrent-stream quota walls; the thegraph.market Hosted Sink portal is
+# beta and too buggy to use — see CLAUDE.md).
 export SUBSTREAMS_API_TOKEN=$(grep '^SUBSTREAMS_API_TOKEN=' ../.env | cut -d= -f2-)
-DSN='psql://<neon user:pass@host>/neondb?sslmode=require'    # DATABASE_URL with psql:// scheme
+DSN='psql://<neon user:pass@host>/neondb?sslmode=require'    # DATABASE_URL, psql:// scheme
 
 # one-time — relational mode builds tables from finch.v1.Events, no schema.sql.
-# Sink map_raw, NOT map_events: map_events depends on store_meme_pools, forcing
-# ~3.5M blocks of backprocessing from initialBlock before it emits. map_raw
-# starts at any block and carries everything the bot reads.
+# map_raw not map_events: map_events needs ~3.5M blocks of store backprocessing.
 substreams sink postgres setup --dsn="$DSN" substreams.yaml map_raw
 
-# run (1 worker; no stop block = backfill then live). Needs a Pinax key with
-# concurrent-stream headroom — the first free key was quota-blocked.
-substreams sink postgres --dsn="$DSN" -e robinhood.substreams.pinax.network:443 \
-  --start-block=58436370 -H 'X-Substreams-Parallel-Workers: 1' \
+# run. --start-block NEAR CHAIN HEAD (last ~1-2 days) — Neon free tier is 512 MB
+# and full history overruns it (poolswap ~200 MB unused; Transfer ~0.8 MB/1k blk).
+# No stop block = backfill then tail live.
+substreams sink postgres --dsn="$DSN" -e mainnet.robinhood.streamingfast.io:443 \
+  --start-block=<head-minus-~150k> \
   finch-substreams-v0.1.0.spkg map_raw
 
-# then apply the seed-table / q_* view layer and run the Goldsky history seed:
-psql "$DATABASE_URL" -f ../deploy/neon-schema.sql
-cd ../bot && SEED_MAX_BLOCK=58436370 SEED_WALLETS=<demo wallets> \
-  node --env-file=../.env scripts/seed-from-goldsky.mjs
+# size guard: deploy/finch-prune.timer runs bot/scripts/prune-neon.mjs hourly —
+# TRUNCATE poolswap/poolmodifyliquidity, keep transfer to PRUNE_WINDOW_BLOCKS.
 ```
 
 Tables: `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`, `poolswap`,
 `poolmodifyliquidity` (proto field names, `"from"`/`"to"` quoted, `block`/
 `timestamp` NUMERIC, plus `_block_number_` / `_block_timestamp_`). No PKs (proto
-carries no schema.proto annotations) — fine for our read patterns.
-
-Verify the canonical fixture landed:
-`select amount, from_label from transfer where tx_hash='0x022e94a3…b53b9'
-and "to"='0x2a58fb44f78d7b600aec945ba8cb253896793ed3';`
-→ `7370695524996258`, `Pons fee claim contract` (100 recipients in that tx).
+carries no schema.proto annotations) — fine for our read patterns. The bot reads
+`transfer`, `tokenlaunch`, `graduation`, `poolinitialize` only.
 
 On the box: `deploy/finch-sink.service` (see `deploy/DOC_deploy.md`).
 

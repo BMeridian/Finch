@@ -1,5 +1,5 @@
 [Unit]
-Description=Finch Substreams sink (Pinax -> Postgres, pure Substreams live path)
+Description=Finch Substreams sink (StreamingFast -> Neon Postgres)
 After=network-online.target
 Wants=network-online.target
 
@@ -9,17 +9,16 @@ User=ec2-user
 WorkingDirectory=/home/ec2-user/_Finch/substreams
 EnvironmentFile=/etc/finch/finch.env
 # Sinks map_raw (NOT map_events): map_events depends on the store_meme_pools
-# store, which forces ~3.5M blocks of backprocessing from initialBlock before it
-# emits anything at 58436370. map_raw has no store dep -> starts instantly, and
-# still emits transfers / launches / graduations / pools (all the bot queries;
-# map_events only adds Meme-Hook swap filtering, which no bot path uses).
-# 1 parallel worker + Restart=always absorbs any Pinax ResourceExhausted.
-# No stop block: Neon cursor if present, else --start-block (= Goldsky seed head).
+# store -> ~3.5M blocks of backprocessing before it emits. map_raw starts at
+# --start-block and carries everything the bot reads (transfers / launches /
+# graduations / pools; map_events only adds Meme-Hook swap filtering, unused).
+# Endpoint = StreamingFast's Robinhood endpoint, auth = thegraph.market token
+# (SUBSTREAMS_API_TOKEN). FREE tier: 5 parallel workers. Restart=always covers
+# transient stream drops. No stop block: Neon cursor if present, else start-block.
 ExecStart=/usr/local/bin/substreams sink postgres \
   --dsn=${SUBSTREAMS_SINK_DSN} \
   -e ${SUBSTREAMS_ENDPOINT} \
-  --start-block=58436370 \
-  -H "X-Substreams-Parallel-Workers: 1" \
+  --start-block=59400000 \
   /home/ec2-user/_Finch/substreams/finch-substreams-v0.1.0.spkg map_raw
 Restart=always
 RestartSec=15

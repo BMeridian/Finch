@@ -33,9 +33,9 @@ const LAUNCH_SELECT = `
          g.timestamp::text as "graduationTimestamp",
          l.timestamp::text as timestamp,
          l.tx_hash as "txHash"
-  from q_tokenlaunch l
+  from tokenlaunch l
   left join lateral (
-    select gg.token as token, gg.tx_hash, gg.timestamp from q_graduation gg
+    select gg.token as token, gg.tx_hash, gg.timestamp from graduation gg
     where lower(gg.token) = lower(l.token)
     order by (gg.kind = 'PoolGraduated') desc, gg.block asc
     limit 1
@@ -48,11 +48,11 @@ export async function runQuery(p: Parsed): Promise<QueryResult> {
     let where = `lower("to") = $1`
     if (p.token) { params.push(p.token.toLowerCase()); where += ` and lower(token) = $2` }
     const transfers = await sql<TransferRow>(
-      `select ${TRANSFER_COLS} from q_transfer where ${where} order by block desc limit 25`, params,
+      `select ${TRANSFER_COLS} from transfer where ${where} order by block desc limit 25`, params,
     )
     if (transfers.length) return { kind: "wallet", walletIndexed: true, transfers, via: "substreams" }
     const [{ e }] = await sql<{ e: boolean }>(
-      `select exists(select 1 from q_transfer where lower("to") = $1 or lower("from") = $1) as e`, [w],
+      `select exists(select 1 from transfer where lower("to") = $1 or lower("from") = $1) as e`, [w],
     )
     return { kind: "wallet", walletIndexed: e, transfers: [], via: "substreams" }
   }

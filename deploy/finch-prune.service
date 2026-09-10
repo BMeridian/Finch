@@ -1,0 +1,10 @@
+[Unit]
+Description=Prune the Finch transfer table (Neon free-tier size guard)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ec2-user
+WorkingDirectory=/home/ec2-user/_Finch/bot
+EnvironmentFile=/etc/finch/finch.env
+ExecStart=/usr/bin/node scripts/prune-neon.mjs

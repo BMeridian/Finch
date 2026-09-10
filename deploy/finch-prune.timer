@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly prune of the Finch transfer table (Neon free-tier size guard)
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -5,44 +5,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status
 
 **Pivoted off subgraphs.** The Graph dev-rel (Pedro) confirmed a Goldsky-hosted
-subgraph does NOT satisfy the track ("must be consumed directly from The Graph's
-network or Studio"), and Robinhood Chain (eip155:4663) is on neither. Pure
-Substreams is the eligible path (Substreams bounty; whether Pinax-as-registry-
-provider also counts for the main track is an open question out to Pedro).
+subgraph does NOT satisfy the track, **and neither does Goldsky-seeded data** —
+"we will not recognize Goldsky Subgraphs, that team is not affiliated with The
+Graph." Robinhood Chain (eip155:4663) is not on The Graph's network or Studio.
+The eligible path is **pure Substreams consumed from a Graph provider**.
 
 **Live architecture: Substreams → Postgres → bot.**
-- `substreams/` module streams from Pinax (`robinhood.substreams.pinax.network:443`).
-- `substreams sink postgres` (relational mode on `map_events` / `finch.v1.Events`)
-  writes tables `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`,
-  `poolswap`, `poolmodifyliquidity` to **Neon** managed Postgres (`DATABASE_URL`).
-  No `db_out`/`graph_out`, no schema.sql, no Rust changes — the sink builds the
-  schema from the proto.
-- Bot queries Neon directly (`bot/src/db.ts`, `pg`). `bot/src/subgraph.ts` deleted;
+- `substreams/` module, published as `finch-substreams@v0.1.0` on substreams.dev.
+- **Data source: StreamingFast's Robinhood endpoint** (`mainnet.robinhood
+  .streamingfast.io:443`), auth = a **thegraph.market** Substreams token
+  (`SUBSTREAMS_API_TOKEN` — FREE tier, 5 parallel workers). Made this account at
+  thegraph.market; its token also works against Pinax's endpoint.
+  (Pinax's own free keys hit concurrent-stream quota walls — dead ends. The
+  thegraph.market Hosted Sink portal is beta and was too buggy to use — identifier
+  parser rejects `substreams-dev://`, config doesn't persist on restart.)
+- `substreams sink postgres` (relational mode on **`map_raw`** / `finch.v1.Events`)
+  writes `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`, `poolswap`,
+  `poolmodifyliquidity` to **Neon** free-tier Postgres (`DATABASE_URL`). No
+  `db_out`, no schema.sql, no Rust — sink builds the schema from the proto.
+  `map_raw` not `map_events`: `map_events` needs ~3.5M blocks of store
+  backprocessing before it emits; `map_raw` starts at any block.
+- Bot queries Neon directly (`bot/src/db.ts`, `pg`). `subgraph.ts` deleted;
   `query.ts` / `freshness.ts` / `candidates.ts` / `format.ts` / `serialize.ts` /
-  `ens.ts` rewritten GraphQL→SQL, reading the **`q_*` views**.
-- On the box: `finch-sink.service` sinks **`map_raw`** (not `map_events` — that
-  needs 3.5M blocks of store backprocessing before it emits; `map_raw` starts
-  instantly and has everything the bot queries). `--start-block=58436370`, `-H
-  'X-Substreams-Parallel-Workers: 1'`, no stop block, `Restart=always`.
-- **Pinax key**: the original key's plan hit a concurrent-stream / quota wall
-  (status.pinax.network was green — it was the account, not an outage). A second
-  Pinax account's JWT is now `SUBSTREAMS_API_TOKEN` — streams fine (~500 msg/s).
-  Old `PINAX_API_KEY` / `SUBSTREAMS_API_KEY` in `.env` are the dead first account.
+  `ens.ts` rewritten GraphQL→SQL.
+- On the box: `finch-sink.service` (`--start-block` near chain head — see below),
+  no stop block, `Restart=always`.
 
-**Two-source Postgres (`deploy/neon-schema.sql`).** History is seeded from the
-Goldsky subgraph (the first Pinax key was quota-blocked when this was built).
-`substreams sink postgres` WIPES its tables on any cursorless start, so seed and
-sink cannot share tables:
-- sink writes `transfer` / `tokenlaunch` / … (blocks ≥ 58436370, live)
-- `bot/scripts/seed-from-goldsky.mjs` writes `*_s` tables (blocks < 58436370;
-  `SEED_WALLETS` scopes transfers to the 3 demo wallets + their payout batches —
-  Neon free tier is 512 MB, a full transfer index does not fit)
-- bot reads `q_transfer` etc. = `transfer UNION ALL transfer_s`
+**Neon free tier is 512 MB and this chain overruns it.** `map_raw` emits every
+Uniswap V4 swap (`poolswap` ~200 MB, unused by the bot) and Transfer volume is
+~0.8 MB / 1000 blocks (fee-settlement multicalls). So:
+- `finch-sink.service` starts near chain head (last ~1–2 days), NOT full history.
+  The canonical demo wallet `0x2a58fb44…ed3` (last payout ~7 days back) is out of
+  range — headline `0x2408ce75…` / `0x36de68e8…` instead. Full history needs
+  paid Neon (~$19) or ClickHouse.
+- `finch-prune.timer` (hourly) runs `bot/scripts/prune-neon.mjs`: TRUNCATE
+  `poolswap` / `poolmodifyliquidity` every run, and keep `transfer` to a rolling
+  `PRUNE_WINDOW_BLOCKS` (250k ≈ 3 days) window. Launches / graduations /
+  poolinitialize are small, kept in full.
 
-So the *live* path is pure Substreams; historical breadth is Goldsky-sourced.
-Note the demo answer numbers shift vs. the Substreams-only version (more history
-→ a newer "most recent" payout). `DOC_prompt.md` build spec is superseded
-(canonical wallet `0x2a58fb44…ed3`, 15-token watch list, terser answers).
+`DOC_prompt.md` build spec is superseded (canonical wallet `0x2a58fb44…ed3`,
+15-token watch list, terser answers).
 
 ## What Finch is
 
@@ -58,9 +60,11 @@ agents call through.
 
 ```
 /subgraph    - Legacy AssemblyScript subgraph (Goldsky) — no longer read by the bot
-/substreams  - LIVE data source: Substreams module (Pinax) + finch.proto + spkg
+/substreams  - LIVE data source: Substreams module + finch.proto + spkg
+               (published: finch-substreams@v0.1.0 on substreams.dev)
 /bot         - Telegram bot (@FinchRH_bot) + NLI backend + HTTP API
   src/db.ts        - pg pool + SQL helpers against Neon (the Substreams sink target)
+  scripts/prune-neon.mjs - hourly Neon size guard (finch-prune.timer)
   src/answer.ts    - answer() prose / answerJson() structured — shared extract+query
   src/http.ts      - HTTP API (the endpoint Bazantic wraps): /query /health /calls /SKILL.md
   src/calllog.ts   - every Gateway/agent call logged (in-memory ring + .calls.jsonl)
@@ -106,19 +110,14 @@ same `answer()`/`answerJson()` backend.
   Check every other address (PoolManager, PositionManager, FeeEscrow, stock
   tokens, demo fixture addresses) on Blockscout first.
 - **Deploy target**: Subgraph Studio + The Graph decentralized network do NOT
-  support Robinhood Chain (`eip155:4663` — registry lists it with an empty
-  `subgraphs` service list). Data source is Pinax Substreams
-  (`robinhood.substreams.pinax.network:443`), registry-listed Firehose/Substreams
-  provider for this chain, sunk to Neon Postgres.
+  support Robinhood Chain (`eip155:4663`). Data source is Substreams via
+  `mainnet.robinhood.streamingfast.io:443` (thegraph.market token), sunk to Neon.
 - **The box is openSUSE Leap 16.0** (`zypper`, not `dnf` — DOC_deploy.md is stale),
   t3.micro, ~935MB RAM with ~136MB free — which is why Postgres is Neon-managed,
-  not on-box. Services: `finch-api`, `finch-bot`, `finch-sink`.
-- **Live data only** — the sink streams the Pinax endpoint live, not mocked or
-  static data. The canonical demo tx is a hardcoded test fixture with locked
+  not on-box. Services: `finch-api`, `finch-bot`, `finch-sink`, `finch-prune.timer`.
+- **Live data only** — the sink streams the Substreams endpoint live, not mocked
+  or static data. The canonical demo tx is a hardcoded test fixture with locked
   answer wording, but that is a fixture, not a data-source substitute.
-- **Pinax concurrent-stream cap**: this key rejects parallel workers
-  (`ResourceExhausted: Concurrent stream limit exceeded`). Always pass
-  `-H 'X-Substreams-Parallel-Workers: 1'`; retries / `Restart=always` get through.
 
 ## Hard constraints
 

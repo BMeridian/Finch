@@ -61,14 +61,14 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
   // Always HISTORY — a "standing entitlement" count is inherently backward-looking
   // and the live window is too short to count against.
   const rec = await sql<{ block: string }>(
-    `select block::text as block from q_transfer where lower("to") = lower($1) and lower("from") = lower($2) order by block asc limit 1000`,
+    `select block::text as block from transfer where lower("to") = lower($1) and lower("from") = lower($2) order by block asc limit 1000`,
     [p.wallet, r.from],
   ).catch(() => [] as { block: string }[])
   const blocks = rec.map(x => parseInt(x.block, 10)).sort((a, b) => a - b)
 
   // mechanism: recipient count of this exact payout tx.
   const rc = await sql<{ id: string }>(
-    `select tx_hash as id from q_transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+    `select tx_hash as id from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
     [r.txHash, r.from],
   ).then(d => d.length).catch(() => 0)
 
@@ -80,7 +80,7 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
 
   // recipients of this same tx from D
   const batch = await sql<{ to: string; amount: string }>(
-    `select "to", amount from q_transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+    `select "to", amount from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
     [r.txHash, D],
   ).catch(() => [] as { to: string; amount: string }[])
 

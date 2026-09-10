@@ -20,8 +20,8 @@ export async function sql<T = any>(text: string, params: unknown[] = []): Promis
 export async function headBlock(): Promise<number> {
   const r = await sql<{ b: string | null }>(
     `select greatest(
-       coalesce((select max(block) from q_transfer), 0),
-       coalesce((select max(block) from q_tokenlaunch), 0)
+       coalesce((select max(block) from transfer), 0),
+       coalesce((select max(block) from tokenlaunch), 0)
      )::text as b`,
   )
   return r[0]?.b ? parseInt(r[0].b, 10) : 0
