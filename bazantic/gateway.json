@@ -9,7 +9,7 @@
   "upstream": {
     "base_url": "https://<FINCH_HTTP_BASE>",
     "forward_headers": ["x-payer", "x-caller", "x-agent-id"],
-    "$comment": "forward_headers carry the paying agent's identity through to Finch so /calls can attribute the request"
+    "$comment": "forwarded if a direct caller sets them; the Bazantic gateway does not populate them, so gateway calls reach Finch with no agent identity — /calls logs them as an opaque per-request trace id only"
   },
   "routes": [
     {

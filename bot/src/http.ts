@@ -43,7 +43,11 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/health") return send(200, await freshness().catch(e => ({ error: String(e) })))
   if (url.pathname === "/SKILL.md" || url.pathname === "/skill") {
-    try { return send(200, readFileSync(SKILL, "utf8"), "text/markdown") } catch { return send(404, { error: "SKILL.md not found" }) }
+    try {
+      const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || url.protocol.replace(":", "")
+      const base = process.env.FINCH_PUBLIC_URL || `${proto}://${req.headers.host}`
+      return send(200, readFileSync(SKILL, "utf8").replaceAll("{BASE}", base), "text/markdown")
+    } catch { return send(404, { error: "SKILL.md not found" }) }
   }
   if (url.pathname === "/spec" || url.pathname === "/openapi.json") {
     try {
