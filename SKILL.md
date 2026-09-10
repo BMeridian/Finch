@@ -2,12 +2,10 @@
 
 **What it does:** answers factual questions about where a Robinhood Chain
 (EVM chain 4663) wallet's tokens came from, and about Pons launchpad activity.
-The Graph Network doesn't index Robinhood Chain; Finch does — standard subgraph
-schema + GraphQL, so agents query it with tooling they already have. Backed by a
-subgraph (The Graph's schema + AssemblyScript mappings) hosted on Goldsky —
-indexing the Pons launch factory, the Uniswap V4 PoolManager (pools behind
-Pons's Meme Hook), and tokenized-stock transfers — plus live on-chain contract
-reads. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands
+The Graph Network doesn't index Robinhood Chain; Finch does — a pure Substreams
+pipeline (Pinax Firehose → `substreams sink postgres` → Postgres) indexing the
+Pons launch factory, the Uniswap V4 PoolManager (pools behind Pons's Meme Hook),
+and tokenized-stock transfers — plus live on-chain contract reads. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands
 in; Finch decodes the last hop, the hard part — V4's singleton PoolManager and
 per-pool hooks are opaque to generic indexers and block explorers. Read-only.
 
@@ -29,7 +27,7 @@ per-pool hooks are opaque to generic indexers and block explorers. Read-only.
 | `q` | query or JSON body | natural-language question (optional; defaults to "why did I get NVDA" when only a wallet is given) |
 | `format` | query or JSON body | `json` (default) or `prose` |
 
-Other routes: `GET /health` (subgraph freshness vs chain head), `GET /calls`
+Other routes: `GET /health` (index freshness vs chain head), `GET /calls`
 (who has called Finch), `GET /SKILL.md` (this file), `GET /spec` (OpenAPI).
 Operator toggles for the call log: `GET /seeAgent` (full record — caller,
 question, latency), `GET /seeAgentMin` (terse), `GET /agentOff`.
@@ -123,7 +121,7 @@ Desktop, Cursor. It calls this same HTTP API. Tools:
 
 - `finch_wallet_provenance` — `{ wallet, question?, format? }` -> provenance
 - `finch_pons_activity` — `{ question }` -> recent launches / graduation status
-- `finch_health` — `{}` -> subgraph freshness
+- `finch_health` — `{}` -> index freshness
 
 Run: `FINCH_HTTP_BASE={BASE} npm run mcp` (from `bot/`).
 
