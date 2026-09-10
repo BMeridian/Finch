@@ -7,6 +7,7 @@ import { freshness } from "./freshness.js"
 import { pons25Text } from "./pons25.js"
 import { finchTopText, coverageText } from "./lists.js"
 import { settlementsSince } from "./x402.js"
+import { runFinchGraphEns } from "./bazrecipe.js"
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 if (!token) { console.error("TELEGRAM_BOT_TOKEN missing (expected in ../.env)"); process.exit(1) }
@@ -33,6 +34,7 @@ const HELP = [
   "   NVDA                ← just the symbol",
   "   /trace NVDA         ← adds the tx route + path",
   "   /traceENS NVDA      ← …+ ENS names for the wallets in the path",
+  "   /bazrep 0x… NVDA    ← run it as a paid Bazantic recipe (LLM-driven)",
   "",
   "   /forget   clear your wallet",
   "   /start    reset",
@@ -117,6 +119,30 @@ bot.command("help", (ctx) => ctx.reply(HELP))
 bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { link_preview_options: { is_disabled: true } }))
 bot.command(["foragents", "api"], (ctx) => ctx.reply(agentsText(), { link_preview_options: { is_disabled: true } }))
 bot.command("ping", (ctx) => ctx.reply("pong"))
+
+// /bazrep — run the PUBLISHED Bazantic recipe FINCH_GRAPH_ENS. Bazantic drives
+// an LLM that chains Finch's own paid gateway tools (finchQuery -> ensResolve)
+// and composes the answer. The bot is just another agent calling the recipe.
+bot.command(["bazrep", "bazrecipe"], async (ctx) => {
+  const m = (ctx.match ?? "").toString().match(/(0x[0-9a-fA-F]{40})(?:\s+([A-Za-z]{1,8}))?/)
+  if (!m) return ctx.reply(
+    "Usage: /bazrep 0x<wallet> [SYMBOL]\n\n" +
+    "Runs the published Bazantic recipe FINCH_GRAPH_ENS — an LLM that chains " +
+    "Finch provenance (Substreams) to ENS resolution (The Graph's ENS subgraph), " +
+    "each a paid gateway call. ~40s.")
+  const [, wallet, symbol] = m
+  await ctx.replyWithChatAction("typing")
+  await ctx.reply("Running Bazantic recipe <b>FINCH_GRAPH_ENS</b> … (LLM + 2 paid gateway calls, ~40s)", { parse_mode: "HTML" })
+  try {
+    const r = await runFinchGraphEns(wallet, symbol)
+    await ctx.reply(
+      `<b>Bazantic recipe · FINCH_GRAPH_ENS</b>  <i>${feedEsc(r.gateway.replace(/^https:\/\//, ""))}</i>\n\n` +
+      feedEsc(r.output).slice(0, 3500),
+      { parse_mode: "HTML", link_preview_options: { is_disabled: true } })
+  } catch (e) {
+    await ctx.reply(`recipe failed: ${feedEsc(String(e))} — try again, the recipe gateway's upstream timeout is flaky`)
+  }
+})
 
 function agentsText(): string {
   const base = process.env.FINCH_PUBLIC_URL || "https://<finch-host>"
