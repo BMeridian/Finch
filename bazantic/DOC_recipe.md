@@ -9,10 +9,15 @@ calls, and the Telegram bot / MCP server are other consumers of it.
 `<BASE>` below = Finch's deployed https URL (`FINCH_PUBLIC_URL` in `.env`; the
 live value and the registered gateway slug are in `DOC_box.local.md`).
 
-## Status: registered and active
+## Status
 
-The gateway is live and metering (`--auth-type x402-mpp`, price set per call).
-Nothing more is needed to demo. The steps below are the reproduction recipe.
+Gateway **registered and active** — slug `ui7avlwzinb2bixwluy64t26ia`,
+`https://ui7avlwzinb2bixwluy64t26ia.bazgateway.com`. Routes proxy correctly
+(Bazantic Fly infra → Caddy → box → real answers).
+
+**Open:** `pricing` is still `null` — the `/query` route proxies at plain `200`,
+no x402 handshake. Set it to **x402 / amount 0** in the dashboard wizard (below)
+to make it a metered $0.00 call. The steps below are the reproduction recipe.
 
 ## Register (two operator steps)
 
@@ -47,7 +52,21 @@ baz gateway add \
 CLI offers it but the gateway has no jwt branch and silently drops the service.)
 
 Finish in the dashboard wizard (`/gateways/new`, ANALYZE → REVIEW → ACTIVATE):
-set the per-call price on `finchQuery`, then activate.
+set the pricing on `finchQuery`, then activate.
+
+**Pricing: x402 at amount `0` — not "free".** A $0.00 *metered* call still runs
+the full handshake: the gateway issues `402 Payment Required` with an `accepts`
+block, the agent signs a zero-value payment authorization, the gateway verifies
+it and serves. "Free" skips the 402 entirely — which defeats the demo. Currency
+USDC, chain **Base (`eip155:8453`)** — x402 settles on Base, not Robinhood Chain.
+If the wizard rejects amount 0, use the smallest nonzero (e.g. `0.0001`) and fund
+the `baz wallet` with a few cents of Base USDC.
+
+Verify the route is metered (not skipped):
+```bash
+curl -i <BASE>/query        # via the GATEWAY url -> expect 402 + accepts block
+```
+`pricing: null` in `baz gateway list --json` means it was never set → plain 200.
 
 ## What agents get
 
