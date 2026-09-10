@@ -1,4 +1,4 @@
-import { gql } from "./subgraph.js"
+import { sql } from "./db.js"
 import { tokenMeta } from "./tokens.js"
 
 // "Which token caused this NVDA fee payout" — a candidate list, not a verdict.
@@ -31,21 +31,20 @@ export async function candidatesFor(wallet: string, receivedToken = NVDA): Promi
   // the watch list, that also appear as a Pool currency alongside the received
   // token. Limited to watched tokens — the subgraph does not index arbitrary
   // Pons-token transfers — but honest and fast.
-  const d = await gql<{
-    inbound: { token: string }[]; outbound: { token: string }[]
-    a: { currency0: string; currency1: string }[]
-    b: { currency0: string; currency1: string }[]
-  }>(`query ($w: String!, $t: Bytes!) {
-    inbound:  transfers(where: { to: $w }, first: 1000)   { token }
-    outbound: transfers(where: { from: $w }, first: 1000)  { token }
-    a: pools(where: { currency0: $t }, first: 1000) { currency0 currency1 }
-    b: pools(where: { currency1: $t }, first: 1000) { currency0 currency1 }
-  }`, { w, t: receivedToken })
+  const t = receivedToken.toLowerCase()
+  const [touchedRows, pairRows] = await Promise.all([
+    sql<{ token: string }>(
+      `select distinct token from transfer where lower("to") = $1 or lower("from") = $1`, [w],
+    ),
+    sql<{ currency0: string; currency1: string }>(
+      `select currency0, currency1 from poolinitialize where lower(currency0) = $1 or lower(currency1) = $1`, [t],
+    ),
+  ])
 
-  const touched = new Set([...d.inbound, ...d.outbound].map(x => x.token.toLowerCase()))
+  const touched = new Set(touchedRows.map(x => x.token.toLowerCase()))
   touched.delete(receivedToken)
   const paired = new Set<string>()
-  for (const p of [...d.a, ...d.b]) {
+  for (const p of pairRows) {
     paired.add(p.currency0.toLowerCase())
     paired.add(p.currency1.toLowerCase())
   }

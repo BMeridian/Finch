@@ -1,5 +1,5 @@
 import { chat, llmAvailable } from "./llm.js"
-import { gql, gqlLive, gqlOn } from "./subgraph.js"
+import { sql } from "./db.js"
 import { human, tokenMeta, TOKENS, KNOWN_SYMBOLS } from "./tokens.js"
 import { candidatesFor } from "./candidates.js"
 import { resolveDistributors, txCall } from "./distributor.js"
@@ -56,14 +56,11 @@ const when = (t?: string) => `<b>${ago(t)}</b>  ·  ${tsET(t)}`
 
 // The span the subgraphs actually cover, as timestamps — for "nothing found" replies.
 async function indexedRange(): Promise<string> {
-  const oldest = "{ t: transfers(first: 1, orderBy: block, orderDirection: asc) { timestamp } }"
-  const newest = "{ t: transfers(first: 1, orderBy: block, orderDirection: desc) { timestamp } }"
-  const [h, live] = await Promise.all([
-    gql<{ t: { timestamp: string }[] }>(oldest).catch(() => null),
-    gqlLive<{ t: { timestamp: string }[] }>(newest).catch(() => null),
-  ])
-  const from = h?.t[0]?.timestamp
-  const to = live?.t[0]?.timestamp
+  const span = await sql<{ from: string | null; to: string | null }>(
+    `select min(timestamp)::text as from, max(timestamp)::text as to from transfer`,
+  ).catch(() => null)
+  const from = span?.[0]?.from ?? undefined
+  const to = span?.[0]?.to ?? undefined
   if (!from) return ""
   return `Indexed range: ${tsET(from)} – ${tsET(to)}.`
 }
@@ -123,19 +120,17 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     const c = resolved.find(x => x.distributor === D.toLowerCase()) ?? resolved[0]
 
     // recipients paid by D in THIS tx — the epoch batch this wallet was in
-    const batch = await gqlOn<{ t: { to: string; amount: string }[] }>(q.via,
-      `query ($tx: Bytes!, $from: Bytes!) {
-        t: transfers(where: { txHash: $tx, from: $from }, first: 1000) { to amount }
-      }`, { tx: r.txHash, from: D },
-    ).then(d => d.t).catch(() => [] as { to: string; amount: string }[])
+    const batch = await sql<{ to: string; amount: string }>(
+      `select "to", amount from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+      [r.txHash, D],
+    ).catch(() => [] as { to: string; amount: string }[])
     const n = batch.length || "many"
 
     // recurrence (within the indexed range)
-    const recTx = await gql<{ t: { block: string }[] }>(
-      `query ($w: String!, $src: Bytes!) {
-        t: transfers(where: { to: $w, from: $src }, orderBy: block, orderDirection: asc, first: 1000) { block }
-      }`, { w: r.to, src: D },
-    ).then(d => d.t).catch(() => [] as { block: string }[])
+    const recTx = await sql<{ block: string }>(
+      `select block::text as block from transfer where lower("to") = lower($1) and lower("from") = lower($2) order by block asc limit 1000`,
+      [r.to, D],
+    ).catch(() => [] as { block: string }[])
     const recN = recTx.length
     const recStr = `${recN}× in the indexed range`
 
@@ -226,7 +221,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
       `  from  ${D}\n` +
       `  tx    ${r.txHash}\n\n` +
       body + `\n\n` +
-      `data: The Graph-derived Goldsky subgraph (Pons factory + Uniswap V4 PoolManager) + on-chain reads · Robinhood Chain 4663 · this endpoint is live on the Bazantic gateway`
+      `data: Substreams (Pinax) → Postgres (Pons factory + Uniswap V4 PoolManager) + on-chain reads · Robinhood Chain 4663 · this endpoint is live on the Bazantic gateway`
   }
 
   // Non-canonical category — deterministic base; LLM only rephrases if configured.

@@ -1,4 +1,4 @@
-import { gqlOn } from "./subgraph.js"
+import { sql } from "./db.js"
 import type { QueryResult, TransferRow } from "./query.js"
 import type { Parsed } from "./extract.js"
 
@@ -46,10 +46,10 @@ export async function ensBlock(p: Parsed, q: Extract<QueryResult, { kind: "walle
 
   // the epoch batch: everyone paid by the same distributor in the same tx
   const batch = isFeeSettlement(r)
-    ? await gqlOn<{ t: { to: string }[] }>(q.via,
-        `query ($tx: Bytes!, $from: Bytes!) { t: transfers(where: { txHash: $tx, from: $from }, first: 1000) { to } }`,
-        { tx: r.txHash, from: r.from },
-      ).then(d => d.t.map(x => x.to.toLowerCase())).catch(() => [] as string[])
+    ? await sql<{ to: string }>(
+        `select "to" from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+        [r.txHash, r.from],
+      ).then(d => d.map(x => x.to.toLowerCase())).catch(() => [] as string[])
     : []
 
   const names = await resolveEns([wallet, ...froms, ...batch])

@@ -16,9 +16,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@types/pg": "^8.23.1",
     "grammy": "^1.30.0",
-    "zod": "^3.25.76",
-    "tsx": "^4.19.0"
+    "pg": "^8.23.0",
+    "tsx": "^4.19.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

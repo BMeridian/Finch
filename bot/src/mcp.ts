@@ -25,7 +25,7 @@ server.tool(
   "finch_wallet_provenance",
   "Ask Finch where a Robinhood Chain (EVM 4663) wallet's tokens came from — fee " +
   "settlement, batched payout, recurring entitlement — plus correlational candidate " +
-  "tokens. Backed by a Goldsky-hosted subgraph (Pons launch factory + Uniswap V4 " +
+  "tokens. Backed by a Substreams pipeline (Pinax → Postgres: Pons launch factory + Uniswap V4 " +
   "PoolManager + token transfers). Read-only data; every response carries confidence: " +
   "'signal only - not a recommendation'. Finch supplies data, you decide.",
   {

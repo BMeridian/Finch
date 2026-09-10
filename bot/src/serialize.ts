@@ -1,4 +1,4 @@
-import { gql, gqlOn } from "./subgraph.js"
+import { sql } from "./db.js"
 import { human, tokenMeta } from "./tokens.js"
 import { candidatesFor } from "./candidates.js"
 import { resolveDistributors } from "./distributor.js"
@@ -11,7 +11,7 @@ import type { QueryResult, TransferRow } from "./query.js"
 // hence the fixed `caveat` and `confidence` fields.
 
 const CONFIDENCE = "signal only - not a recommendation"
-const DATA_SOURCE = "The Graph-derived Goldsky subgraph (Pons launch factory + Uniswap V4 PoolManager), Robinhood Chain 4663; this API is also live on the Bazantic gateway"
+const DATA_SOURCE = "Substreams pipeline (Pinax firehose, Robinhood Chain 4663) → Postgres: Pons launch factory + Uniswap V4 PoolManager + stock-token transfers; this API is also live on the Bazantic gateway"
 
 const isFeeSettlement = (r: TransferRow) => /fee claim|fee settlement|feeescrow/i.test(r.fromLabel ?? "")
 
@@ -60,19 +60,17 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
   // recurring: prior payouts to this wallet from the same source contract.
   // Always HISTORY — a "standing entitlement" count is inherently backward-looking
   // and the live window is too short to count against.
-  const rec = await gql<{ t: { block: string }[] }>(
-    `query ($w: String!, $src: Bytes!) {
-      t: transfers(where: { to: $w, from: $src }, orderBy: block, orderDirection: asc, first: 1000) { block }
-    }`, { w: p.wallet, src: r.from },
-  ).then(d => d.t).catch(() => [] as { block: string }[])
+  const rec = await sql<{ block: string }>(
+    `select block::text as block from transfer where lower("to") = lower($1) and lower("from") = lower($2) order by block asc limit 1000`,
+    [p.wallet, r.from],
+  ).catch(() => [] as { block: string }[])
   const blocks = rec.map(x => parseInt(x.block, 10)).sort((a, b) => a - b)
 
-  // mechanism: recipient count of this exact payout tx — from whichever subgraph
-  // the payout was found in.
-  const rc = await gqlOn<{ c: { id: string }[] }>(q.via,
-    `query ($tx: Bytes!, $src: Bytes!) { c: transfers(where: { txHash: $tx, from: $src }, first: 1000) { id } }`,
-    { tx: r.txHash, src: r.from },
-  ).then(d => d.c.length).catch(() => 0)
+  // mechanism: recipient count of this exact payout tx.
+  const rc = await sql<{ id: string }>(
+    `select tx_hash as id from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+    [r.txHash, r.from],
+  ).then(d => d.length).catch(() => 0)
 
   // The payer of this token IS the distributor — resolve it on-chain.
   const D = r.from
@@ -81,10 +79,10 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
   const c = resolved.find(x => x.distributor === D.toLowerCase()) ?? resolved[0]
 
   // recipients of this same tx from D
-  const batch = await gqlOn<{ t: { to: string; amount: string }[] }>(q.via,
-    `query ($tx: Bytes!, $from: Bytes!) { t: transfers(where: { txHash: $tx, from: $from }, first: 1000) { to amount } }`,
-    { tx: r.txHash, from: D },
-  ).then(d => d.t).catch(() => [] as { to: string; amount: string }[])
+  const batch = await sql<{ to: string; amount: string }>(
+    `select "to", amount from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+    [r.txHash, D],
+  ).catch(() => [] as { to: string; amount: string }[])
 
   const corr = (await candidatesFor(r.to, r.token).catch(() => [] as { symbol: string; address: string }[]))
     .filter(x => !c || x.address.toLowerCase() !== c.token)
