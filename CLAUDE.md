@@ -21,26 +21,29 @@ The eligible path is **pure Substreams consumed from a Graph provider**.
   parser rejects `substreams-dev://`, config doesn't persist on restart.)
 - `substreams sink postgres` (relational mode on **`map_raw`** / `finch.v1.Events`)
   writes `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`, `poolswap`,
-  `poolmodifyliquidity` to **Neon** free-tier Postgres (`DATABASE_URL`). No
-  `db_out`, no schema.sql, no Rust — sink builds the schema from the proto.
+  `poolmodifyliquidity` to **Aiven** PostgreSQL, free tier 1 GB (`DATABASE_URL`).
+  Neon (512 MB) is kept as `NEON_DATABASE_URL_FALLBACK` in `finch.env`, idle.
+  No `db_out`, no schema.sql, no Rust — sink builds the schema from the proto.
   `map_raw` not `map_events`: `map_events` needs ~3.5M blocks of store
   backprocessing before it emits; `map_raw` starts at any block.
-- Bot queries Neon directly (`bot/src/db.ts`, `pg`). `subgraph.ts` deleted;
+- Bot queries the DB directly (`bot/src/db.ts`, `pg`). Aiven uses a private CA,
+  so `db.ts` strips `sslmode` from the URL and sets
+  `ssl:{rejectUnauthorized:false}` (still TLS). `subgraph.ts` deleted;
   `query.ts` / `freshness.ts` / `candidates.ts` / `format.ts` / `serialize.ts` /
   `ens.ts` rewritten GraphQL→SQL.
 - On the box: `finch-sink.service` (`--start-block` near chain head — see below),
   no stop block, `Restart=always`.
 
-**Neon free tier is 512 MB and this chain overruns it.** `map_raw` emits every
-Uniswap V4 swap (`poolswap` ~200 MB, unused by the bot) and Transfer volume is
-~0.8 MB / 1000 blocks (fee-settlement multicalls). So:
-- `finch-sink.service` starts near chain head (last ~1–2 days), NOT full history.
-  The canonical demo wallet `0x2a58fb44…ed3` (last payout ~7 days back) is out of
-  range — headline `0x2408ce75…` / `0x36de68e8…` instead. Full history needs
-  paid Neon (~$19) or ClickHouse.
+**Even 1 GB is tight for this chain.** `map_raw` emits every Uniswap V4 swap
+(`poolswap` ~200 MB, unused by the bot) and Transfer is ~1.5 MB / 1000 blocks
+(fee-settlement multicalls). So:
+- `finch-sink.service` starts ~150k blocks back (last ~1–2 days), NOT full
+  history. The canonical demo wallet `0x2a58fb44…ed3` (last payout ~7 days back)
+  is out of range — headline `0x2408ce75…` / `0x36de68e8…` instead. Full history
+  needs a paid tier or Postgres on a bigger box (t3.small, 8.5 GB disk free).
 - `finch-prune.timer` (hourly) runs `bot/scripts/prune-neon.mjs`: TRUNCATE
-  `poolswap` / `poolmodifyliquidity` every run, and keep `transfer` to a rolling
-  `PRUNE_WINDOW_BLOCKS` (250k ≈ 3 days) window. Launches / graduations /
+  `poolswap` / `poolmodifyliquidity` every run, `vacuum transfer`, and keep
+  `transfer` to `PRUNE_WINDOW_BLOCKS` (250k ≈ 2.8 days). Launches / graduations /
   poolinitialize are small, kept in full.
 
 `DOC_prompt.md` build spec is superseded (canonical wallet `0x2a58fb44…ed3`,
@@ -63,7 +66,7 @@ agents call through.
 /substreams  - LIVE data source: Substreams module + finch.proto + spkg
                (published: finch-substreams@v0.1.0 on substreams.dev)
 /bot         - Telegram bot (@FinchRH_bot) + NLI backend + HTTP API
-  src/db.ts        - pg pool + SQL helpers against Neon (the Substreams sink target)
+  src/db.ts        - pg pool + SQL helpers against the sink DB (Aiven/Neon)
   scripts/prune-neon.mjs - hourly Neon size guard (finch-prune.timer)
   src/answer.ts    - answer() prose / answerJson() structured — shared extract+query
   src/http.ts      - HTTP API (the endpoint Bazantic wraps): /query /health /calls /SKILL.md
@@ -111,9 +114,9 @@ same `answer()`/`answerJson()` backend.
   tokens, demo fixture addresses) on Blockscout first.
 - **Deploy target**: Subgraph Studio + The Graph decentralized network do NOT
   support Robinhood Chain (`eip155:4663`). Data source is Substreams via
-  `mainnet.robinhood.streamingfast.io:443` (thegraph.market token), sunk to Neon.
+  `mainnet.robinhood.streamingfast.io:443` (thegraph.market token), sunk to Aiven Postgres.
 - **The box is openSUSE Leap 16.0** (`zypper`, not `dnf` — DOC_deploy.md is stale),
-  t3.micro, ~935MB RAM with ~136MB free — which is why Postgres is Neon-managed,
+  t3.micro, ~935MB RAM with ~136MB free — which is why Postgres is a managed service (Aiven),
   not on-box. Services: `finch-api`, `finch-bot`, `finch-sink`, `finch-prune.timer`.
 - **Live data only** — the sink streams the Substreams endpoint live, not mocked
   or static data. The canonical demo tx is a hardcoded test fixture with locked
