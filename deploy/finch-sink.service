@@ -8,17 +8,19 @@ Type=simple
 User=ec2-user
 WorkingDirectory=/home/ec2-user/_Finch/substreams
 EnvironmentFile=/etc/finch/finch.env
-# Pinax caps concurrent streams on this key -> 1 parallel worker + always-restart
-# absorbs the intermittent ResourceExhausted. No stop block: picks up from the
-# Neon cursor if present, else --start-block. Start block = the Goldsky seed's
-# head (bot/scripts/seed-from-goldsky.mjs, SEED_MAX_BLOCK) so the Substreams sink
-# owns everything from there forward with no overlap.
+# Sinks map_raw (NOT map_events): map_events depends on the store_meme_pools
+# store, which forces ~3.5M blocks of backprocessing from initialBlock before it
+# emits anything at 58436370. map_raw has no store dep -> starts instantly, and
+# still emits transfers / launches / graduations / pools (all the bot queries;
+# map_events only adds Meme-Hook swap filtering, which no bot path uses).
+# 1 parallel worker + Restart=always absorbs any Pinax ResourceExhausted.
+# No stop block: Neon cursor if present, else --start-block (= Goldsky seed head).
 ExecStart=/usr/local/bin/substreams sink postgres \
   --dsn=${SUBSTREAMS_SINK_DSN} \
   -e ${SUBSTREAMS_ENDPOINT} \
   --start-block=58436370 \
   -H "X-Substreams-Parallel-Workers: 1" \
-  /home/ec2-user/_Finch/substreams/finch-substreams-v0.1.0.spkg map_events
+  /home/ec2-user/_Finch/substreams/finch-substreams-v0.1.0.spkg map_raw
 Restart=always
 RestartSec=15
 Environment=NODE_ENV=production

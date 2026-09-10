@@ -20,15 +20,19 @@ provider also counts for the main track is an open question out to Pedro).
 - Bot queries Neon directly (`bot/src/db.ts`, `pg`). `bot/src/subgraph.ts` deleted;
   `query.ts` / `freshness.ts` / `candidates.ts` / `format.ts` / `serialize.ts` /
   `ens.ts` rewritten GraphQL→SQL, reading the **`q_*` views**.
-- On the box: `finch-sink.service` (`--start-block=58436370`, `-H
-  'X-Substreams-Parallel-Workers: 1'` — Pinax caps concurrent streams — no stop
-  block: backfills from there to head then tails live; `Restart=always` absorbs
-  the intermittent `ResourceExhausted`).
+- On the box: `finch-sink.service` sinks **`map_raw`** (not `map_events` — that
+  needs 3.5M blocks of store backprocessing before it emits; `map_raw` starts
+  instantly and has everything the bot queries). `--start-block=58436370`, `-H
+  'X-Substreams-Parallel-Workers: 1'`, no stop block, `Restart=always`.
+- **Pinax key**: the original key's plan hit a concurrent-stream / quota wall
+  (status.pinax.network was green — it was the account, not an outage). A second
+  Pinax account's JWT is now `SUBSTREAMS_API_TOKEN` — streams fine (~500 msg/s).
+  Old `PINAX_API_KEY` / `SUBSTREAMS_API_KEY` in `.env` are the dead first account.
 
-**Two-source Postgres (`deploy/neon-schema.sql`).** Pinax Substreams was badly
-rate-limited (~25 blk/s → days to backfill) so history is seeded from the Goldsky
-subgraph. But `substreams sink postgres` WIPES its tables on any cursorless start,
-so seed and sink cannot share tables:
+**Two-source Postgres (`deploy/neon-schema.sql`).** History is seeded from the
+Goldsky subgraph (the first Pinax key was quota-blocked when this was built).
+`substreams sink postgres` WIPES its tables on any cursorless start, so seed and
+sink cannot share tables:
 - sink writes `transfer` / `tokenlaunch` / … (blocks ≥ 58436370, live)
 - `bot/scripts/seed-from-goldsky.mjs` writes `*_s` tables (blocks < 58436370;
   `SEED_WALLETS` scopes transfers to the 3 demo wallets + their payout batches —

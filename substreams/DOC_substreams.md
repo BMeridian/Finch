@@ -70,13 +70,22 @@ substreams 1.22.0 · rustc 1.93.1 + wasm32-unknown-unknown · buf 1.72.0 · prot
 export SUBSTREAMS_API_TOKEN=$(grep '^SUBSTREAMS_API_TOKEN=' ../.env | cut -d= -f2-)
 DSN='psql://<neon user:pass@host>/neondb?sslmode=require'    # DATABASE_URL with psql:// scheme
 
-# one-time — relational mode builds tables from finch.v1.Events, no schema.sql:
-substreams sink postgres setup --dsn="$DSN" substreams.yaml map_events
+# one-time — relational mode builds tables from finch.v1.Events, no schema.sql.
+# Sink map_raw, NOT map_events: map_events depends on store_meme_pools, forcing
+# ~3.5M blocks of backprocessing from initialBlock before it emits. map_raw
+# starts at any block and carries everything the bot reads.
+substreams sink postgres setup --dsn="$DSN" substreams.yaml map_raw
 
-# run (1 worker: Pinax caps concurrent streams; no stop block = backfill then live):
+# run (1 worker; no stop block = backfill then live). Needs a Pinax key with
+# concurrent-stream headroom — the first free key was quota-blocked.
 substreams sink postgres --dsn="$DSN" -e robinhood.substreams.pinax.network:443 \
-  --start-block=53505176 -H 'X-Substreams-Parallel-Workers: 1' \
-  finch-substreams-v0.1.0.spkg map_events
+  --start-block=58436370 -H 'X-Substreams-Parallel-Workers: 1' \
+  finch-substreams-v0.1.0.spkg map_raw
+
+# then apply the seed-table / q_* view layer and run the Goldsky history seed:
+psql "$DATABASE_URL" -f ../deploy/neon-schema.sql
+cd ../bot && SEED_MAX_BLOCK=58436370 SEED_WALLETS=<demo wallets> \
+  node --env-file=../.env scripts/seed-from-goldsky.mjs
 ```
 
 Tables: `transfer`, `tokenlaunch`, `graduation`, `poolinitialize`, `poolswap`,
