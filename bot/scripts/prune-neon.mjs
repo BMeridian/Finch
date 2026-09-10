@@ -20,5 +20,6 @@ const r = await pool.query(
     where block::bigint < (select coalesce(max(block::bigint),0) - $1 from transfer)`,
   [WINDOW],
 )
+await pool.query(`vacuum transfer`)   // reclaim the deleted rows' space (Neon bills on size)
 console.log(`pruned ${r.rowCount} transfer rows (window ${WINDOW}) + truncated pool churn at ${new Date().toISOString()}`)
 await pool.end()
