@@ -11,12 +11,19 @@ live value and the registered gateway slug are in `DOC_box.local.md`).
 
 ## Status — done
 
-Gateway **registered and active** — slug `ui7avlwzinb2bixwluy64t26ia`,
-`https://ui7avlwzinb2bixwluy64t26ia.bazgateway.com`. Proxies real
-Substreams-backed answers (Bazantic Fly infra → Caddy → box).
+Gateway **registered and active** — slug in `DOC_box.local.md`
+(`<slug>.bazgateway.com`). Proxies real Substreams-backed answers (Bazantic Fly
+infra → Caddy → box). Tools exposed: `finchQuery` (GET /query), `finchQueryPost`
+(POST /query), **`ensResolve` (GET /ens — reverse 0x→.eth via The Graph's ENS
+subgraph)**, `finchHealth` (GET /health).
 
-`/query` is priced at **1 MCENT = $0.00001** and issues a spec-compliant x402
-challenge:
+> Re-syncing the spec: `baz gateway add` on an existing name creates a **new
+> slug**, it does not update in place. To pick up a spec change: re-add, set the
+> pricing + publish the new gateway, delete the old. `bazDemo.sh` resolves by
+> name so it follows automatically; the `payTo` is unchanged.
+
+`/query` and `/ens` are priced at **1 MCENT = $0.00001** each and issue a
+spec-compliant x402 challenge:
 
 ```
 $ curl -s -i "$GW/query?wallet=0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0" | head
@@ -94,22 +101,18 @@ baz gateway add \
 `/query` calls are free; the gateway meters. (Do NOT use `--auth-type jwt` — the
 CLI offers it but the gateway has no jwt branch and silently drops the service.)
 
-Finish in the dashboard wizard (`/gateways/new`, ANALYZE → REVIEW → ACTIVATE):
-set the pricing on `finchQuery`, then activate.
+Finish in the **dashboard** (Gateways → the gateway → Resources): set a price on
+each route, then **Publish**.
 
-**Pricing: x402 at amount `0` — not "free".** A $0.00 *metered* call still runs
-the full handshake: the gateway issues `402 Payment Required` with an `accepts`
-block, the agent signs a zero-value payment authorization, the gateway verifies
-it and serves. "Free" skips the 402 entirely — which defeats the demo. Currency
-USDC, chain **Base (`eip155:8453`)** — x402 settles on Base, not Robinhood Chain.
-If the wizard rejects amount 0, use the smallest nonzero (e.g. `0.0001`) and fund
-the `baz wallet` with a few cents of Base USDC.
+**Price must be nonzero.** `0` = free, the gateway skips the 402 entirely (plain
+200) — confirmed. Use `1` MCENT ($0.00001); the gateway then issues the x402
+challenge (USDC on Base, `eip155:8453`). Set `/health` to `0` so probes stay
+free. After changing prices you must hit **Publish** (a plain Save only drafts).
 
-Verify the route is metered (not skipped):
+Verify the route is metered:
 ```bash
-curl -i <BASE>/query        # via the GATEWAY url -> expect 402 + accepts block
+curl -i <BASE>/query?wallet=0x…     # via the GATEWAY url -> expect 402
 ```
-`pricing: null` in `baz gateway list --json` means it was never set → plain 200.
 
 ## What agents get
 
@@ -145,3 +148,47 @@ Buy/sell signals or scores — Finch never produces these. A confirmed *cause* f
 why a specific wallet is in an epoch batch — Finch reports the token's route and
 says plainly that the selection is off-chain. `confidence` is a fixed string on
 every response; the calling agent owns the decision.
+
+## Recipe: FINCH_GRAPH_ENS (published)
+
+A Bazantic **Recipe** — an LLM workflow with a prompt + a whitelist of paid
+gateway tools. `bazantic.com/dashboard/recipes/finch-graph-ens`.
+
+Chains two paid tools, step 2's input from step 1's output:
+
+```
+finchQuery (Finch / Substreams)          ensResolve (Finch / The Graph ENS subgraph)
+  wallet -> provenance + hex addresses  ->  addresses -> .eth names
+```
+
+**Inputs:** `wallet` (required), `symbol` (optional, default NVDA).
+
+**Prompt** (verbatim):
+
+```
+Inputs: a wallet address {{inputs.wallet}} and a token symbol {{inputs.symbol}}
+(default NVDA if not given).
+
+1. Call finchQuery with wallet=<that address>, q="why did I get {{inputs.symbol}}",
+   format=json. Take: token received (event.token_received, event.amount), the
+   paying contract (event.paid_by_contract), and the route (path.route — strings
+   with 0x addresses). If event is null, say the wallet has no {{inputs.symbol}}
+   in Finch's indexed range and stop.
+2. Build a comma-separated list of every distinct 0x address: the wallet,
+   event.paid_by_contract, and each 0x in path.route.
+3. Call ensResolve with addresses=<that list>. Returns `resolved` (address -> .eth
+   names) and `unresolved` (Robinhood Chain contracts, no name).
+4. Answer: one line "<wallet .eth or short 0x> received <amount> <token>, routed
+   through <payer .eth or short 0x>", then each route address -> its .eth name(s)
+   or "no ENS name".
+
+Never give trading advice. Preserve confidence: "signal only - not a recommendation".
+```
+
+**Verified run** — `wallet=0x36de68e810781dd7699d8fc7fe7def8aae51cec2`:
+`daio.eth received 0.0117 NVDA, routed through the Pons holder-fee distributor
+(no ENS name)`, with the FeeEscrow / distributor / pool addresses all shown as
+Robinhood Chain contracts with no `.eth`.
+
+The standalone script version is `recipes/ens-enrich.mjs` (same chain, run
+locally; uses The Graph's subgraph MCP for discovery).
