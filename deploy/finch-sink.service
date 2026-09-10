@@ -18,8 +18,8 @@ EnvironmentFile=/etc/finch/finch.env
 ExecStart=/usr/local/bin/substreams sink postgres \
   --dsn=${SUBSTREAMS_SINK_DSN} \
   -e ${SUBSTREAMS_ENDPOINT} \
-  --start-block=59499000 \
-  /home/ec2-user/_Finch/substreams/finch-substreams-v0.1.0.spkg map_raw
+  --start-block=59473118 \
+  /home/ec2-user/_Finch/substreams/finch-substreams-v0.1.1.spkg map_bot
 Restart=always
 RestartSec=15
 Environment=NODE_ENV=production

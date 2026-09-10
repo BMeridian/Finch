@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: finch_substreams
-  version: v0.1.0
+  version: v0.1.1
   url: https://github.com/asherbenj/finch
   description: >
     Finch — Pons V2 launches, Uniswap V4 PoolManager events filtered to the Pons
@@ -51,6 +51,14 @@ modules:
     initialBlock: 53480000
     inputs:
       - map: map_raw
+
+  - name: map_bot
+    kind: map
+    initialBlock: 53480000
+    inputs:
+      - map: map_raw
+    output:
+      type: proto:finch.v1.Events
 
   - name: map_events
     kind: map

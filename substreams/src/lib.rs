@@ -152,6 +152,22 @@ fn store_meme_pools(raw: finch::Events, s: StoreSetIfNotExistsInt64) {
     for p in raw.pool_initializes { s.set_if_not_exists(0, &p.pool_id, &1); }
 }
 
+// ---- map_bot: everything the Finch bot reads, nothing it doesn't ----------
+// map_raw minus pool_swaps / pool_modify_liquidity. Those are every Uniswap V4
+// swap on the chain (unfiltered) — the bot never queries them, and their write
+// volume is what a small managed Postgres (Aiven free tier) can't keep up with.
+#[substreams::handlers::map]
+fn map_bot(raw: finch::Events) -> Result<finch::Events, Error> {
+    Ok(finch::Events {
+        token_launches: raw.token_launches,
+        graduations: raw.graduations,
+        pool_initializes: raw.pool_initializes,
+        pool_swaps: vec![],
+        pool_modify_liquidity: vec![],
+        transfers: raw.transfers,
+    })
+}
+
 // ---- map_events: pool activity filtered to known Meme-Hook pools ----------
 #[substreams::handlers::map]
 fn map_events(raw: finch::Events, pools: StoreGetInt64) -> Result<finch::Events, Error> {
