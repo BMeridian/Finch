@@ -126,7 +126,7 @@ bot.command("ping", (ctx) => ctx.reply("pong"))
 async function runBazrep(ctx: any, wallet: string, symbol?: string) {
   setBazrep(ctx.chat.id, undefined)
   await ctx.replyWithChatAction("typing")
-  await ctx.reply("Running Bazantic recipe <b>FINCH_GRAPH_ENS</b> … (LLM + 2 paid gateway calls, ~40s)", { parse_mode: "HTML" })
+  await ctx.reply("Running Bazantic recipe <b>FINCH_GRAPH_ENS</b> … (LLM chains finchQuery → ensResolve, ~40s)", { parse_mode: "HTML" })
   try {
     const r = await runFinchGraphEns(wallet, symbol)
     await ctx.reply(
