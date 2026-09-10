@@ -35,24 +35,36 @@ export interface X402Verify {
   note: string
 }
 
-// Most recent USDC settlement to the gateway payTo on Base — used by the
-// Telegram feed to annotate a `bazantic:` call with what it paid. At demo pace
-// (one call at a time) this is that call's payment.
-export async function latestSettlement(): Promise<{ amount_usdc: string; tx: string; block: number } | null> {
+export interface Settlement { amount_usdc: string; tx: string; block: number; logIndex: number }
+
+// USDC settlements to the gateway payTo on Base, oldest-first, after `afterBlock`.
+// The Telegram feed consumes these in order so back-to-back `bazantic:` calls
+// each get their own tx rather than all sharing the latest.
+export async function settlementsSince(afterBlock: number): Promise<Settlement[]> {
   const head = parseInt(await rpc("eth_blockNumber", []), 16)
+  // afterBlock 0 = cold start: only look at the last ~30s so we don't hand out
+  // stale settlements. Otherwise scan from the cursor, capped at ~20 min.
+  const from = afterBlock > 0 ? Math.max(afterBlock + 1, head - 600) : head - 15
   const logs = await rpc("eth_getLogs", [{
-    fromBlock: "0x" + Math.max(0, head - 300).toString(16),   // ~10 min of Base
+    fromBlock: "0x" + Math.max(0, from).toString(16),
     toBlock: "latest",
     address: USDC,
     topics: [TRANSFER_TOPIC, null, "0x000000000000000000000000" + PAY_TO.slice(2)],
   }]).catch(() => null)
-  if (!logs?.length) return null
-  const l = logs[logs.length - 1]
-  return {
-    amount_usdc: (Number(BigInt(l.data)) / 1e6).toFixed(6),
-    tx: l.transactionHash,
-    block: parseInt(l.blockNumber, 16),
-  }
+  if (!Array.isArray(logs)) return []
+  return logs
+    .map((l: any) => ({
+      amount_usdc: (Number(BigInt(l.data)) / 1e6).toFixed(6),
+      tx: l.transactionHash as string,
+      block: parseInt(l.blockNumber, 16),
+      logIndex: parseInt(l.logIndex, 16),
+    }))
+    .sort((a: Settlement, b: Settlement) => a.block - b.block || a.logIndex - b.logIndex)
+}
+
+export async function latestSettlement(): Promise<Settlement | null> {
+  const all = await settlementsSince(0)
+  return all.length ? all[all.length - 1] : null
 }
 
 export async function verifyPayment(txHash: string): Promise<X402Verify> {

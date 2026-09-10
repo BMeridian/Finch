@@ -6,7 +6,7 @@ import { setSeeMode, seeMode, callStats, tailCalls, callLogSize, type CallRecord
 import { freshness } from "./freshness.js"
 import { pons25Text } from "./pons25.js"
 import { finchTopText, coverageText } from "./lists.js"
-import { latestSettlement } from "./x402.js"
+import { settlementsSince } from "./x402.js"
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 if (!token) { console.error("TELEGRAM_BOT_TOKEN missing (expected in ../.env)"); process.exit(1) }
@@ -195,7 +195,7 @@ bot.command(["graduated", "grads", "graduates"], replyGraduated)
 // subscribe THIS chat to a live feed: the bot tails the shared call log and
 // posts each new agent call here until /agentOff.
 const WATCH_FILE = new URL("../.seewatch.json", import.meta.url).pathname
-type Watch = { chatId: number; offset: number }
+type Watch = { chatId: number; offset: number; settleBlock?: number }
 function readWatch(): Watch | null { try { return JSON.parse(readFileSync(WATCH_FILE, "utf8")) } catch { return null } }
 function writeWatch(w: Watch | null) {
   try { w ? writeFileSync(WATCH_FILE, JSON.stringify(w)) : unlinkSync(WATCH_FILE) } catch { /* ignore */ }
@@ -246,7 +246,13 @@ async function pumpWatch() {
   const mode = seeMode()
   if (!w || mode === "off") return
   const { records, offset } = tailCalls(w.offset)
-  if (offset !== w.offset) writeWatch({ ...w, offset })
+  let settleBlock = w.settleBlock ?? 0
+  // Bazantic sends no payment header. Pull USDC settlements to the gateway payTo
+  // off Base and hand them out to bazantic: calls in order — one tx per call.
+  const wantsSettlement = records.some(r => r.route === "/query" && r.caller.startsWith("bazantic:") && (r.wallet || r.question) && r.ok)
+  const settlements = wantsSettlement ? await settlementsSince(settleBlock).catch(() => []) : []
+  let si = 0
+
   for (const r of records) {
     if (r.route !== "/query") continue
     // the feed is "proof of real agent calls" — skip price probes (no wallet,
@@ -256,8 +262,8 @@ async function pumpWatch() {
     try {
       let msg = fmtCall(r, mode === "full" ? "full" : "min")
       if (r.caller.startsWith("bazantic:")) {
-        // Bazantic sends no payment header — read the x402 settlement off Base.
-        const s = await latestSettlement().catch(() => null)
+        const s = settlements[si++]
+        if (s) settleBlock = Math.max(settleBlock, s.block)
         const paid = s
           ? `   💸 <b>$${(+s.amount_usdc).toString()}</b> x402 · tx ${feedEsc(s.tx.slice(0, 10) + "…" + s.tx.slice(-6))} (Base)`
           : `   💸 <b>$0.00001</b> x402 (Base)`
@@ -267,6 +273,7 @@ async function pumpWatch() {
       console.log(`feed -> chat ${w.chatId}: ${r.caller} ${r.question || "-"}`)
     } catch (e) { console.error("feed send failed:", e) }
   }
+  if (offset !== w.offset || settleBlock !== (w.settleBlock ?? 0)) writeWatch({ ...w, offset, settleBlock })
 }
 setInterval(() => { pumpWatch().catch(() => { }) }, 2500)
 
