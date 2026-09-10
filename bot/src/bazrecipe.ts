@@ -49,8 +49,25 @@ export async function runFinchGraphEns(wallet: string, symbol?: string): Promise
   })
   if (call?.error) throw new Error(call.error.message || "recipe error")
   const sc = call?.result?.structuredContent?.output
-  if (typeof sc === "string") return { output: sc, gateway: gw }
-  const txt = call?.result?.content?.[0]?.text
-  try { return { output: JSON.parse(txt).output ?? txt, gateway: gw } }
-  catch { return { output: String(txt ?? "(no output)"), gateway: gw } }
+  let out: string
+  if (typeof sc === "string") out = sc
+  else {
+    const txt = call?.result?.content?.[0]?.text
+    try { out = JSON.parse(txt).output ?? txt } catch { out = String(txt ?? "(no output)") }
+  }
+  return { output: tidy(out), gateway: gw }
+}
+
+// The recipe LLM adds chatter despite the prompt — a "Perfect! …" preamble, a
+// trailing confidence paragraph, `---` rules. Strip all of it.
+function tidy(s: string): string {
+  let t = s
+  const cut = t.search(/\n[ \t]*[*_#>-]*[ \t]*(note[ :]|confidence|disclaimer|caveat|signal only|not a recommendation)/i)
+  if (cut > 0) t = t.slice(0, cut)
+  t = t
+    .replace(/^\s*(perfect|great|got it|here('?s| are| is)|now i (have|can)|the (results?|answer)|summary)\b[^\n]*\n+/im, "")
+    .replace(/^[-*_\s]*\n+/, "")           // leading rule / blank
+    .replace(/\n[-*_\s]*$/g, "")           // trailing rule
+    .trim()
+  return t || s.trim()
 }
