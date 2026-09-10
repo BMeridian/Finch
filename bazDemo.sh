@@ -33,6 +33,7 @@ set -euo pipefail
 
 WALLET="${DEMO_WALLET:-0x2a58fb44f78d7b600aec945ba8cb253896793ed3}"
 MAX="${BAZ_MAX:-0.02}"
+DIRECT="${FINCH_DIRECT:-https://16-171-61-0.sslip.io}"   # Finch's own URL (free utility routes)
 ACCT="${BAZ_ACCOUNT:-wallet}"        # "wallet" (self-custody) or a grant name (baz grant create)
 STEP="${1:-all}"
 TOK="${2:-NVDA}"          # pairing-token filter for launches / grads
@@ -104,8 +105,8 @@ call() {
 try: print(json.load(sys.stdin).get("paid",{}).get("transaction","") or "")
 except Exception: print("")' 2>/dev/null)"
   if [ -n "$tx" ]; then
-    say "   verify the payment on Base — Finch checks its own settlement"
-    run "curl -s \"$ENDPOINT/x402/verify?tx=$tx\" | pp"
+    say "   verify the payment on Base — Finch checks its own settlement (direct, free)"
+    run "curl -s \"$DIRECT/x402/verify?tx=$tx\" | pp"
   fi
 }
 
