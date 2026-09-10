@@ -34,10 +34,10 @@ export async function candidatesFor(wallet: string, receivedToken = NVDA): Promi
   const t = receivedToken.toLowerCase()
   const [touchedRows, pairRows] = await Promise.all([
     sql<{ token: string }>(
-      `select distinct token from transfer where lower("to") = $1 or lower("from") = $1`, [w],
+      `select distinct token from q_transfer where lower("to") = $1 or lower("from") = $1`, [w],
     ),
     sql<{ currency0: string; currency1: string }>(
-      `select currency0, currency1 from poolinitialize where lower(currency0) = $1 or lower(currency1) = $1`, [t],
+      `select currency0, currency1 from q_poolinitialize where lower(currency0) = $1 or lower(currency1) = $1`, [t],
     ),
   ])
 

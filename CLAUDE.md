@@ -19,17 +19,26 @@ provider also counts for the main track is an open question out to Pedro).
   schema from the proto.
 - Bot queries Neon directly (`bot/src/db.ts`, `pg`). `bot/src/subgraph.ts` deleted;
   `query.ts` / `freshness.ts` / `candidates.ts` / `format.ts` / `serialize.ts` /
-  `ens.ts` rewritten GraphQL→SQL.
-- On the box: `finch-sink.service` (start-block 53505176, `-H
+  `ens.ts` rewritten GraphQL→SQL, reading the **`q_*` views**.
+- On the box: `finch-sink.service` (`--start-block=58436370`, `-H
   'X-Substreams-Parallel-Workers: 1'` — Pinax caps concurrent streams — no stop
-  block: backfills to head ~15h then tails live; `Restart=always` absorbs the
-  intermittent `ResourceExhausted`).
+  block: backfills from there to head then tails live; `Restart=always` absorbs
+  the intermittent `ResourceExhausted`).
 
-Goldsky subgraphs still deployed (`SUBGRAPH_QUERY_URL` / `SUBGRAPH_LIVE_URL`) but
-the bot no longer reads them. `bot/scripts/seed-from-goldsky.mjs` exists
-(block-split seed for history breadth) but is NOT run — pure-Substreams
-provenance kept clean pending Pedro. `DOC_prompt.md` build spec is superseded (canonical wallet
-`0x2a58fb44…ed3`, 15-token watch list, terser answers).
+**Two-source Postgres (`deploy/neon-schema.sql`).** Pinax Substreams was badly
+rate-limited (~25 blk/s → days to backfill) so history is seeded from the Goldsky
+subgraph. But `substreams sink postgres` WIPES its tables on any cursorless start,
+so seed and sink cannot share tables:
+- sink writes `transfer` / `tokenlaunch` / … (blocks ≥ 58436370, live)
+- `bot/scripts/seed-from-goldsky.mjs` writes `*_s` tables (blocks < 58436370;
+  `SEED_WALLETS` scopes transfers to the 3 demo wallets + their payout batches —
+  Neon free tier is 512 MB, a full transfer index does not fit)
+- bot reads `q_transfer` etc. = `transfer UNION ALL transfer_s`
+
+So the *live* path is pure Substreams; historical breadth is Goldsky-sourced.
+Note the demo answer numbers shift vs. the Substreams-only version (more history
+→ a newer "most recent" payout). `DOC_prompt.md` build spec is superseded
+(canonical wallet `0x2a58fb44…ed3`, 15-token watch list, terser answers).
 
 ## What Finch is
 

@@ -57,7 +57,7 @@ const when = (t?: string) => `<b>${ago(t)}</b>  ·  ${tsET(t)}`
 // The span the subgraphs actually cover, as timestamps — for "nothing found" replies.
 async function indexedRange(): Promise<string> {
   const span = await sql<{ from: string | null; to: string | null }>(
-    `select min(timestamp)::text as from, max(timestamp)::text as to from transfer`,
+    `select min(timestamp)::text as from, max(timestamp)::text as to from q_transfer`,
   ).catch(() => null)
   const from = span?.[0]?.from ?? undefined
   const to = span?.[0]?.to ?? undefined
@@ -121,14 +121,14 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
 
     // recipients paid by D in THIS tx — the epoch batch this wallet was in
     const batch = await sql<{ to: string; amount: string }>(
-      `select "to", amount from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+      `select "to", amount from q_transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
       [r.txHash, D],
     ).catch(() => [] as { to: string; amount: string }[])
     const n = batch.length || "many"
 
     // recurrence (within the indexed range)
     const recTx = await sql<{ block: string }>(
-      `select block::text as block from transfer where lower("to") = lower($1) and lower("from") = lower($2) order by block asc limit 1000`,
+      `select block::text as block from q_transfer where lower("to") = lower($1) and lower("from") = lower($2) order by block asc limit 1000`,
       [r.to, D],
     ).catch(() => [] as { block: string }[])
     const recN = recTx.length

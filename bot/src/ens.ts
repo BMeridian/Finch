@@ -47,7 +47,7 @@ export async function ensBlock(p: Parsed, q: Extract<QueryResult, { kind: "walle
   // the epoch batch: everyone paid by the same distributor in the same tx
   const batch = isFeeSettlement(r)
     ? await sql<{ to: string }>(
-        `select "to" from transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
+        `select "to" from q_transfer where lower(tx_hash) = lower($1) and lower("from") = lower($2) limit 1000`,
         [r.txHash, r.from],
       ).then(d => d.map(x => x.to.toLowerCase())).catch(() => [] as string[])
     : []
