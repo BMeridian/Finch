@@ -109,6 +109,41 @@
         }
       }
     },
+    "/ens": {
+      "get": {
+        "operationId": "ensResolve",
+        "summary": "Reverse-resolve 0x addresses to .eth names via The Graph's canonical ENS subgraph. Feed it the hex addresses from a /query provenance answer (event.paid_by_contract, the addresses in path.route).",
+        "parameters": [
+          {
+            "name": "addresses",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "comma-separated 0x addresses, e.g. 0xabc…,0xdef…"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "resolved names keyed by address, plus the addresses with no name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": { "type": "string" },
+                    "resolved": {
+                      "type": "object",
+                      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+                    },
+                    "unresolved": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "finchHealth",

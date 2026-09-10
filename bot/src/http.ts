@@ -4,6 +4,7 @@ import { answerJson, answer } from "./answer.js"
 import { logCall, recentCalls, callStats, setSeeMode, seeMode } from "./calllog.js"
 import { freshness } from "./freshness.js"
 import { verifyPayment } from "./x402.js"
+import { resolveEns } from "./ens.js"
 
 // Finch's HTTP API — the thing the Bazantic x402/MPP Gateway wraps. Any agent
 // calls this directly too (Finch is a peer, not a gatekeeper). Every request is
@@ -47,6 +48,19 @@ const server = createServer(async (req, res) => {
     const tx = url.searchParams.get("tx") || ""
     if (!tx) return send(400, { error: "pass ?tx=0x… (the paid.transaction from baz curl --json)" })
     return send(200, await verifyPayment(tx).catch(e => ({ error: String(e) })))
+  }
+  if (url.pathname === "/ens") {
+    // reverse resolution: 0x address -> .eth name(s), via The Graph's ENS subgraph.
+    // pairs with /query — feed it the hex addresses from a provenance answer.
+    const raw = url.searchParams.get("addresses") || url.searchParams.get("a") || ""
+    const addrs = raw.split(",").map(s => s.trim().toLowerCase()).filter(a => /^0x[0-9a-f]{40}$/.test(a))
+    if (!addrs.length) return send(400, { error: "pass ?addresses=0x…,0x… (comma-separated)" })
+    const resolved = await resolveEns(addrs).catch(() => ({} as Record<string, string[]>))
+    return send(200, {
+      source: "The Graph — canonical ENS subgraph (mainnet)",
+      resolved,
+      unresolved: addrs.filter(a => !resolved[a]),
+    })
   }
   if (url.pathname === "/SKILL.md" || url.pathname === "/skill") {
     try {
