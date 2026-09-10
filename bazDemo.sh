@@ -20,6 +20,7 @@
 # Env:
 #   BAZ_ENDPOINT   gateway base URL (else resolved from `baz gateway list`)
 #   BAZ_MAX        max USDC per call (default 0.02)
+#   BAZ_ACCOUNT    pay from: "wallet" or a grant name (default wallet)
 #   DEMO_WALLET    wallet to look up (default the canonical fixture)
 #
 # Needs: baz (@bazantic/cli), python3, a `baz wallet`. No jq required.
@@ -28,6 +29,7 @@ set -euo pipefail
 
 WALLET="${DEMO_WALLET:-0x2a58fb44f78d7b600aec945ba8cb253896793ed3}"
 MAX="${BAZ_MAX:-0.02}"
+ACCT="${BAZ_ACCOUNT:-wallet}"        # "wallet" (self-custody) or a grant name (baz grant create)
 STEP="${1:-all}"
 TOK="${2:-NVDA}"          # pairing-token filter for launches / grads
 
@@ -89,7 +91,7 @@ echo "   -> 402 Payment Required; decode the payment-required header for the acc
 call() {
   local url="$1" label="$2"
   say "$label"
-  run "baz curl \"$url\" --account wallet --max-amount $MAX --yes --json | pp"
+  run "baz curl \"$url\" --account $ACCT --max-amount $MAX --yes --json | pp"
   echo "   ^ 'paid' is the x402 settlement record; watch Telegram: '↘ agent call … bazantic:<id>'"
 }
 
