@@ -10,7 +10,9 @@
 import { Pool } from "pg"
 
 const DSN = process.env.DATABASE_URL
-const WINDOW = Number(process.env.PRUNE_WINDOW_BLOCKS || 250000) // ~3 days at ~10 blk/s
+const WINDOW = Number(process.env.PRUNE_WINDOW_BLOCKS || 120000) // ~1.4 days at ~10 blk/s
+// Transfer is ~1.5 MB / 1000 blocks on this chain (fee-settlement multicalls), so
+// the window is the main Neon-size lever. 120k ≈ 180 MB. Box sets this in finch.env.
 if (!DSN) { console.error("DATABASE_URL missing"); process.exit(1) }
 
 const pool = new Pool({ connectionString: DSN })
