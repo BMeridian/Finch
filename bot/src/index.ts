@@ -144,7 +144,8 @@ bot.command(["bazrep", "bazrecipe"], async (ctx) => {
   setBazrep(ctx.chat.id, { step: "wallet" })         // guided: ask for the fields
   return ctx.reply(
     "Bazantic recipe: <b>FINCH_GRAPH_ENS</b>\n" +
-    "<i>Finch provenance (Substreams) → ENS names (The Graph) — LLM-driven, paid.</i>\n\n" +
+    "<i>Finch provenance (Substreams-indexed Pons → Uniswap V4 route) → ENS names " +
+    "(The Graph's ENS subgraph) — LLM-driven, each step a paid gateway call.</i>\n\n" +
     "Wallet (0x…):",
     { parse_mode: "HTML" })
 })
