@@ -6,9 +6,17 @@ import { Pool } from "pg"
 // plus _block_number_ / _block_timestamp_. Column names are the proto field
 // names (snake_case), "from"/"to" are quoted (reserved words).
 
+const RAW = process.env.DATABASE_URL || "postgres://finch@127.0.0.1:5433/finch"
+const local = RAW.includes("localhost") || RAW.includes("127.0.0.1")
+// Strip sslmode from the URL and set ssl explicitly — pg's sslmode=require now
+// means verify-full, which fails against Aiven's private CA. Connection stays
+// TLS-encrypted; we just don't verify the chain.
+const DSN = RAW.replace(/[?&]sslmode=[^&]*/g, "").replace(/\?&/, "?").replace(/[?&]$/, "")
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgres://finch@127.0.0.1:5433/finch",
+  connectionString: DSN,
   max: 4,
+  ssl: local ? undefined : { rejectUnauthorized: false },
 })
 
 export async function sql<T = any>(text: string, params: unknown[] = []): Promise<T[]> {
