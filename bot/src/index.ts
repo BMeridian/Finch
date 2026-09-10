@@ -16,7 +16,7 @@ const ADDR = /^0x[0-9a-fA-F]{40}$/
 const HELP = [
   "Finch — a bird that listens in Sherwood Forest.",
   "It snitches on where your tokens really came from.",
-  "Substreams pipeline (Pinax) · Uniswap V4 pools · callable via Bazantic.",
+  "Substreams pipeline (StreamingFast) · Uniswap V4 pools · callable via Bazantic.",
   "",
   "/process    how Finch works out an answer",
   "/forAgents  how agents call Finch (HTTP / MCP / Bazantic)",
@@ -79,13 +79,13 @@ const PROCESS = [
   "• Off-chain / other-rollup treasuries are invisible to Finch.",
   "• Non-Pons launchpads (lunch.fun, etc.) are not yet indexed.",
   "",
-  "Data source: Substreams pipeline (Pinax) → Postgres + on-chain contract reads + Uniswap V4 pool data; callable by agents via Bazantic.",
+  "Data source: Substreams pipeline (StreamingFast) → Postgres + on-chain contract reads + Uniswap V4 pool data; callable by agents via Bazantic.",
 ].join("\n")
 
 const AGENTS = [
   "Finch — curated access to Robinhood Chain data. Same backend as this bot, three ways in.",
   "",
-  "The Graph Network doesn't index Robinhood Chain; Finch does — a pure Substreams pipeline (Pinax firehose) sinking to Postgres. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands in. Finch decodes the last hop, the hard part — V4's singleton PoolManager and per-pool hooks (here, a Meme Hook) are opaque to generic indexers and block explorers.",
+  "The Graph Network doesn't index Robinhood Chain; Finch does — a pure Substreams pipeline (thegraph.market endpoint) sinking to Postgres. Pons lifecycle: launch → graduation → the Uniswap V4 pool the token lands in. Finch decodes the last hop, the hard part — V4's singleton PoolManager and per-pool hooks (here, a Meme Hook) are opaque to generic indexers and block explorers.",
   "",
   "1. HTTP API",
   "Base: {BASE}",
@@ -160,7 +160,7 @@ bot.command(["health", "status"], async (ctx) => {
     const f = await freshness()
     const s = callStats()
     return ctx.reply(
-      `Substreams sink (Pinax → Postgres): block ${f.subgraph_block} · chain ${f.chain_block}\n` +
+      `Substreams sink (StreamingFast → Postgres): block ${f.subgraph_block} · chain ${f.chain_block}\n` +
       `Lag: ${f.lag_blocks.toLocaleString()} blocks (~${Math.round(f.lag_seconds / 60)} min) · ${f.fresh ? "fresh" : "backfilling"}\n` +
       `Indexing: Pons launch factory + Uniswap V4 PoolManager + stock-token transfers\n` +
       `Agents: ${s.total} calls logged (${seeMode()}) · live on the Bazantic gateway`)

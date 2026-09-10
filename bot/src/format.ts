@@ -221,7 +221,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
       `  from  ${D}\n` +
       `  tx    ${r.txHash}\n\n` +
       body + `\n\n` +
-      `data: Substreams (Pinax) → Postgres (Pons factory + Uniswap V4 PoolManager) + on-chain reads · Robinhood Chain 4663 · this endpoint is live on the Bazantic gateway`
+      `data: Substreams (StreamingFast) → Postgres (Pons factory + Uniswap V4 PoolManager) + on-chain reads · Robinhood Chain 4663 · this endpoint is live on the Bazantic gateway`
   }
 
   // Non-canonical category — deterministic base; LLM only rephrases if configured.

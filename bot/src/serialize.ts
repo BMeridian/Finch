@@ -11,7 +11,7 @@ import type { QueryResult, TransferRow } from "./query.js"
 // hence the fixed `caveat` and `confidence` fields.
 
 const CONFIDENCE = "signal only - not a recommendation"
-const DATA_SOURCE = "Substreams pipeline (Pinax firehose, Robinhood Chain 4663) → Postgres: Pons launch factory + Uniswap V4 PoolManager + stock-token transfers; this API is also live on the Bazantic gateway"
+const DATA_SOURCE = "Substreams pipeline (StreamingFast endpoint, Robinhood Chain 4663) → Postgres: Pons launch factory + Uniswap V4 PoolManager + stock-token transfers; this API is also live on the Bazantic gateway"
 
 const isFeeSettlement = (r: TransferRow) => /fee claim|fee settlement|feeescrow/i.test(r.fromLabel ?? "")
 
