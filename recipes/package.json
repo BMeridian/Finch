@@ -1,0 +1,12 @@
+{
+  "name": "finch-recipes",
+  "private": true,
+  "type": "module",
+  "description": "Chained-MCP recipes on top of Finch",
+  "scripts": {
+    "ens": "node ens-enrich.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  }
+}

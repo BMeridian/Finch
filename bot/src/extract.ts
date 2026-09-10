@@ -15,6 +15,7 @@ export interface Parsed {
   pairGroup?: "pons25" | "finchtop"  // launches: filter to any pairing token in that set
   onlyGraduated?: boolean   // launches: only tokens that reached a Uniswap V4 pool
   unknownSymbol?: string    // a ticker-like word the user meant as a filter but Finch doesn't know
+  wantsEns: boolean         // opt-in: resolve the answer's addresses to ENS names
 }
 
 // symbols recognised for launch filtering = watch list + Pons25
@@ -27,6 +28,7 @@ function symbolToAddress(sym: string): string | undefined {
 
 const ADDR = /0x[0-9a-fA-F]{40}/g
 const TRACE = /\b(trace|technical trace|show me the trace|show addresses|show the addresses|raw trace|full trace|show hex|route|the tx|show tx)\b/i
+const ENSRE = /(\bresolve\b|\bens\b|\.eth\b|\bwho (is|owns)\b|\bwhose\b|\bname (the |these |those )?address(es)?\b|\bput a name\b|\bidentit)/i
 const PONS25_RE = /\bpons\s*25\b/i
 const FINCHTOP_RE = /\bfinch\s*top\b/i
 
@@ -41,6 +43,7 @@ function windowHours(t: string): number | undefined {
 export async function extract(text: string, savedWallet?: string, mode: Mode = "wallet"): Promise<Parsed> {
   const addrs = text.match(ADDR) ?? []
   const wantsTrace = TRACE.test(text)
+  const wantsEns = ENSRE.test(text)
   const sinceHours = windowHours(text)
   const t = text.toLowerCase()
   const selfRef = /\b(i|me|my|mine|my wallet|my account|myself)\b/i.test(t)
@@ -72,7 +75,7 @@ export async function extract(text: string, savedWallet?: string, mode: Mode = "
   // stale "launches" mode so the chat is never trapped there.
   else if (savedWallet && symbol && !launchWords && !graduatedWord && !pairGroupWord && !sinceHours) intent = "wallet"
   else if (mode === "launches" && (symbol || pairGroupWord || graduatedWord)) intent = "launches"   // launches-mode follow-up
-  else if (savedWallet && (selfRef || symbol || wantsTrace || /(why|receiv|got|where.*from|airdrop|claim|dust|distribut|which token|what token|caused this|where.*came from)/i.test(t))) intent = "wallet"
+  else if (savedWallet && (selfRef || symbol || wantsTrace || wantsEns || /(why|receiv|got|where.*from|airdrop|claim|dust|distribut|which token|what token|caused this|where.*came from)/i.test(t))) intent = "wallet"
   else if (launchWords || pairGroupWord) intent = "launches"
 
   if (intent === "unknown" && llmAvailable()) {
@@ -96,6 +99,7 @@ export async function extract(text: string, savedWallet?: string, mode: Mode = "
     tokenSymbol: symbol,
     sinceHours,
     wantsTrace,
+    wantsEns,
     pairFilter: intent === "launches" ? (symAddr ?? addrs[0]?.toLowerCase()) : undefined,
     pairGroup: intent === "launches" ? (pons25 ? "pons25" : finchtop ? "finchtop" : undefined) : undefined,
     // Filtering launches by Pons25 / FinchTop defaults to the graduated ones

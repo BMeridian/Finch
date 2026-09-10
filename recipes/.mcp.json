@@ -1,0 +1,19 @@
+{
+  "$comment": "Register both MCP servers for an agent runtime (Claude Code / Desktop / Cursor). An agent with this config can chain Finch -> The Graph subgraph MCP itself. GRAPH_QUERY_KEY: a Graph gateway query key (Subgraph Studio).",
+  "mcpServers": {
+    "finch": {
+      "command": "npx",
+      "args": ["tsx", "../bot/src/mcp.ts"],
+      "env": { "FINCH_HTTP_BASE": "https://your-finch-host.example" }
+    },
+    "subgraph": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "--header", "Authorization:Bearer ${GRAPH_QUERY_KEY}",
+        "https://subgraphs.mcp.thegraph.com/sse"
+      ],
+      "env": { "GRAPH_QUERY_KEY": "REPLACE_WITH_GRAPH_GATEWAY_KEY" }
+    }
+  }
+}

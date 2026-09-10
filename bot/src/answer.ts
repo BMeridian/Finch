@@ -1,6 +1,7 @@
 import { extract, type Mode } from "./extract.js"
 import { runQuery } from "./query.js"
 import { format } from "./format.js"
+import { ensBlock } from "./ens.js"
 import { toJson } from "./serialize.js"
 import { KNOWN_SYMBOLS } from "./tokens.js"
 
@@ -20,7 +21,15 @@ export async function answer(text: string, savedWallet?: string, mode: Mode = "w
       : "Set your wallet with /account 0x… then send a token symbol — or ask \"what launched on Pons recently\". I also cover graduations."
   }
   const result = await runQuery(parsed)
-  return format(parsed, result)
+  const out = await format(parsed, result)
+  if (parsed.wantsEns && result.kind === "wallet") {
+    const ens = await ensBlock(parsed, result)
+    if (ens) {
+      const i = out.lastIndexOf("\n\ndata: ")   // sit above the data-source footer
+      return i >= 0 ? out.slice(0, i) + ens + out.slice(i) : out + ens
+    }
+  }
+  return out
 }
 
 export async function answerJson(text: string, savedWallet?: string, mode: Mode = "wallet"): Promise<Record<string, unknown>> {
