@@ -10,3 +10,6 @@ node_modules/
 
 # local-only ops notes — box IP, key path, gateway slugs. never commit.
 *.local.md
+
+# deploy box coords (IP + key path)
+deploy/.box.local

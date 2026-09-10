@@ -9,7 +9,9 @@
 # no Finch key, no Robinhood-Chain RPC.
 #
 #   ./bazDemo.sh                     # full run (token defaults to NVDA)
-#   ./bazDemo.sh wallet              # just the wallet-provenance call
+#   ./bazDemo.sh wallet              # wallet-provenance call (default fixture)
+#   ./bazDemo.sh 0x2a58fb44… NVDA    # provenance for that wallet + token
+#   ./bazDemo.sh wallet 0x2a58fb44… SPY   # same, explicit form
 #   ./bazDemo.sh launches TSLA       # recent Pons launches paired vs TSLA
 #   ./bazDemo.sh grads TSLA          # graduated Pons tokens paired vs TSLA
 #   ./bazDemo.sh all GME             # full run, filtered by GME
@@ -28,6 +30,15 @@ WALLET="${DEMO_WALLET:-0x2a58fb44f78d7b600aec945ba8cb253896793ed3}"
 MAX="${BAZ_MAX:-0.02}"
 STEP="${1:-all}"
 TOK="${2:-NVDA}"          # pairing-token filter for launches / grads
+
+# Shorthand: `./bazDemo.sh 0x… [SYM]`  ==  `./bazDemo.sh wallet` for that wallet.
+if [[ "$STEP" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+  WALLET="$STEP"; STEP="wallet"; TOK="${2:-NVDA}"
+fi
+# `./bazDemo.sh wallet 0x… [SYM]`  — explicit form.
+if [ "$STEP" = wallet ] && [[ "${2:-}" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+  WALLET="$2"; TOK="${3:-NVDA}"
+fi
 
 have()  { command -v "$1" >/dev/null 2>&1; }
 pause() { printf '\n\033[2m— press enter —\033[0m'; read -r _; }
@@ -61,8 +72,11 @@ echo "   (no Finch API key, no Robinhood-Chain RPC, no subgraph URL)"
 [ "$STEP" = all ] && pause
 
 # --- 2. READ THE PRICE: the raw x402 challenge ---
+# Unauthenticated GET on the priced route — just to read the 402. No wallet /
+# question, so if the gateway forwards it Finch returns "provide a wallet",
+# not a real lookup.
 say "2. INSPECT — the x402 payment challenge (HTTP 402)"
-run "curl -s -i \"$ENDPOINT/query?wallet=$WALLET\" | sed -n '1,20p'"
+run "curl -s -i \"$ENDPOINT/query\" | sed -n '1,20p'"
 echo "   -> 402 Payment Required, with an 'accepts' block: asset, amount, chain (Base), payTo"
 [ "$STEP" = all ] && pause
 
@@ -75,7 +89,7 @@ call() {
 }
 
 case "$STEP" in
-  wallet)   call "$ENDPOINT/query?wallet=$WALLET&q=why+did+I+get+NVDA" "3. PAID CALL — wallet provenance" ;;
+  wallet)   call "$ENDPOINT/query?wallet=$WALLET&q=why+did+I+get+$TOK" "3. PAID CALL — wallet provenance ($TOK)" ;;
   launches) call "$ENDPOINT/query?q=what+launched+on+pons+recently+$TOK&format=prose" "3. PAID CALL — recent Pons launches vs $TOK" ;;
   grads)    call "$ENDPOINT/query?q=graduated+pons+tokens+$TOK&format=prose" "3. PAID CALL — graduated (Uniswap V4) vs $TOK" ;;
   all)

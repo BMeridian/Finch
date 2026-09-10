@@ -7,9 +7,14 @@ schema:
 # "robinhood-chain". Subgraph Studio does NOT support this chain. Confirm the exact
 # slug in the Goldsky / Pinax dashboard before deploying.
 #
-# startBlock 56090000 — this is finch-LIVE: a short recent window kept fresh for
-# "recent launches / just-happened" queries. Deep history + provenance is the
-# separate finch-rpc/0.4.x deploy (subgraph/, startBlock 53480000).
+# This is finch-LIVE: a short recent window kept fresh for "recent launches /
+# just-happened" queries. Deep history + provenance is the separate
+# finch-rpc/0.4.x deploy (subgraph/, startBlock 53480000).
+#
+# startBlock below is 56090000 — the value used on the ORIGINAL Goldsky account.
+# When redeploying to a FRESH account (see deploy/DOC_fresh_live.md), recompute
+# startBlock at deploy time: set it ~50k blocks below the paused finch-rpc head
+# so there is no coverage gap, then sed it across all 17 data sources.
 
 
 

@@ -6,7 +6,7 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy:goldsky": "goldsky subgraph deploy finch/0.1.0 --path .",
+    "deploy:goldsky": "goldsky subgraph deploy finch-live/0.3.0 --path .",
     "create-local": "graph create --node http://localhost:8020/ finch",
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 finch"
   },
