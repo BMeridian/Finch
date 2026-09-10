@@ -10,7 +10,7 @@ export interface Freshness {
   chain_block: number
   lag_blocks: number
   lag_seconds: number
-  fresh: boolean              // within ~2 min of chain head
+  fresh: boolean              // sink keeping pace with chain head (<= ~10 min)
   history_block: number       // kept for API compatibility — same as sink head
   history_lag_blocks: number
 }
@@ -34,7 +34,10 @@ export async function freshness(): Promise<Freshness> {
     chain_block: chain,
     lag_blocks: lag,
     lag_seconds: Math.round((lag * BLOCK_MS) / 1000),
-    fresh: (lag * BLOCK_MS) / 1000 <= 120,
+    // Aiven free-tier write throughput leaves a small persistent offset (~a few
+    // thousand blocks) even when the sink is tailing live — "fresh" means the
+    // sink is keeping pace, not zero lag.
+    fresh: (lag * BLOCK_MS) / 1000 <= 600,
     history_block: sink,
     history_lag_blocks: lag,
   }
