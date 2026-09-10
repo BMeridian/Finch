@@ -1,27 +1,28 @@
-// Neon free tier is 512 MB. Two things blow it: map_raw emits EVERY Uniswap V4
-// swap (poolswap ~200 MB, poolmodifyliquidity ~14 MB) which the bot never reads,
-// and transfer volume is ~85 MB/day. So: truncate the pool_* churn every run,
-// and keep transfer to a rolling block window. Launches / graduations /
-// poolinitialize are small and kept in full.
+// Managed PG is tight for this chain: map_raw emits EVERY Uniswap V4 swap
+// (poolswap ~200 MB, poolmodifyliquidity ~14 MB, both unused by the bot) and
+// transfer is ~1.5 MB / 1000 blocks (fee-settlement multicalls). So each run:
+// TRUNCATE the pool churn, keep transfer to a rolling PRUNE_WINDOW_BLOCKS window,
+// vacuum. Launches / graduations / poolinitialize are small, kept in full.
 //
 //   node --env-file=../.env scripts/prune-neon.mjs
-// Run hourly via deploy/finch-prune.timer.
+// Run hourly via deploy/finch-prune.timer (name kept though the DB is now Aiven).
 
 import { Pool } from "pg"
 
-const DSN = process.env.DATABASE_URL
-const WINDOW = Number(process.env.PRUNE_WINDOW_BLOCKS || 120000) // ~1.4 days at ~10 blk/s
-// Transfer is ~1.5 MB / 1000 blocks on this chain (fee-settlement multicalls), so
-// the window is the main Neon-size lever. 120k ≈ 180 MB. Box sets this in finch.env.
-if (!DSN) { console.error("DATABASE_URL missing"); process.exit(1) }
+const RAW = process.env.DATABASE_URL
+const WINDOW = Number(process.env.PRUNE_WINDOW_BLOCKS || 250000) // ~2.8 days at ~10 blk/s
+if (!RAW) { console.error("DATABASE_URL missing"); process.exit(1) }
 
-const pool = new Pool({ connectionString: DSN })
+const local = RAW.includes("localhost") || RAW.includes("127.0.0.1")
+const DSN = RAW.replace(/[?&]sslmode=[^&]*/g, "").replace(/\?&/, "?").replace(/[?&]$/, "")
+const pool = new Pool({ connectionString: DSN, ssl: local ? undefined : { rejectUnauthorized: false } })
+
 await pool.query(`truncate poolswap, poolmodifyliquidity`)
 const r = await pool.query(
   `delete from transfer
     where block::bigint < (select coalesce(max(block::bigint),0) - $1 from transfer)`,
   [WINDOW],
 )
-await pool.query(`vacuum transfer`)   // reclaim the deleted rows' space (Neon bills on size)
+await pool.query(`vacuum transfer`)
 console.log(`pruned ${r.rowCount} transfer rows (window ${WINDOW}) + truncated pool churn at ${new Date().toISOString()}`)
 await pool.end()
