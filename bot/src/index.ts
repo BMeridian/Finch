@@ -432,8 +432,8 @@ const MENU = [
   { command: "grads", description: "Graduated tokens on Uniswap V4 (add a symbol)" },
   { command: "seeagent", description: "Live feed of agent calls (on)" },
   { command: "agentoff", description: "Turn the agent-call feed off" },
-  { command: "bazrep", description: "Run the published Bazantic recipe (Finch → ENS)" },
   { command: "agentcall1", description: "Fire a blind paid x402 call (watch /seeAgentFull)" },
+  { command: "bazrep", description: "Run the published Bazantic recipe (Finch → ENS)" },
   { command: "health", description: "Index freshness vs chain head" },
 ]
 
