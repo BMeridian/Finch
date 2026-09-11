@@ -47,6 +47,13 @@
               ],
               "default": "json"
             }
+          },
+          {
+            "name": "ens",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["1"] },
+            "description": "ens=1 (json format only): resolve the wallet, paying contract, path.route addresses, and event.batch_recipients to ENS names in this same call, returned as event.ens_names (address -> .eth names, only addresses that resolved). Avoids a second ensResolve round trip."
           }
         ],
         "responses": {

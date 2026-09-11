@@ -94,12 +94,32 @@ const server = createServer(async (req, res) => {
     // A bare wallet with no question = "why did I get NVDA" for that wallet.
     if (!question && wallet) question = "why did I get NVDA"
 
+    const wantsEns = url.searchParams.get("ens") === "1"
     const caller = callerOf(req)
     const t0 = Date.now()
     try {
       const result = fmt === "prose"
         ? { answer: await answer(question, wallet) }
         : await answerJson(question, wallet)
+      // Optional: fold ENS resolution into this same response (?ens=1), so a
+      // caller — in practice, the FINCH_GRAPH_ENS recipe — gets provenance +
+      // names in ONE tool call instead of two. Bazantic's recipe gateway has a
+      // hard 30s proxy timeout; two sequential LLM-mediated tool calls (each a
+      // network hop the model waits on, then re-reads) was consistently going
+      // over it once the batch got large. One call, computed here in-process,
+      // is much cheaper than that.
+      if (wantsEns && fmt !== "prose") {
+        const j = result as Record<string, any>
+        if (j.event) {
+          const addrs = [
+            wallet,
+            j.event.paid_by_contract,
+            ...(Array.isArray(j.path?.route) ? j.path.route.flatMap((s: string) => s.match(/0x[0-9a-fA-F]{40}/g) ?? []) : []),
+            ...(Array.isArray(j.event.batch_recipients) ? j.event.batch_recipients : []),
+          ].filter(Boolean) as string[]
+          j.event.ens_names = await resolveEns(addrs).catch(() => ({}))
+        }
+      }
       const answerText = typeof (result as { answer?: unknown }).answer === "string"
         ? (result as { answer: string }).answer
         : JSON.stringify(result)
