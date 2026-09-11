@@ -364,7 +364,7 @@ bot.on("message:text", async (ctx) => {
     if (br.step === "wallet") {
       if (!ADDR.test(t)) return ctx.reply("Send a wallet address (0x… 40 hex), or 'cancel'.")
       setBazrep(ctx.chat.id, { step: "symbol", wallet: t.toLowerCase() })
-      return ctx.reply("Symbol (send – for the default NVDA):")
+      return ctx.reply("Symbol (default NVDA):")
     }
     if (br.step === "symbol") {
       const sym = /^[–\-]$|^skip$|^default$/i.test(t) ? undefined : t.replace(/[^A-Za-z]/g, "").slice(0, 8).toUpperCase()
