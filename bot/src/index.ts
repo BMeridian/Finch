@@ -45,7 +45,7 @@ const HELP = [
   "   <token address> graduated?   check one token",
   "",
   "BAZANTIC RECIPE",
-  "   /bazRep              run FINCH_GRAPH_ENS — a paid gateway call (LLM chains finchQuery → ensResolve)",
+  "   /bazRep              FINCH_GRAPH_ENS — paid LLM gateway calls",
   "   /bazRep 0x… NVDA     one-liner form",
   "",
   "LISTS",
