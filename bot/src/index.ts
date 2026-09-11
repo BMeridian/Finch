@@ -15,6 +15,18 @@ if (!token) { console.error("TELEGRAM_BOT_TOKEN missing (expected in ../.env)");
 const bot = new Bot(token)
 const ADDR = /^0x[0-9a-fA-F]{40}$/
 
+// grammy's bot.command() match is case-sensitive against the registered name —
+// Telegram itself doesn't care ("/bazRep" and "/bazrep" both send fine), so
+// lowercase the command token before any command() filter sees it.
+bot.use((ctx, next) => {
+  const msg = ctx.message
+  if (msg?.text?.startsWith("/")) {
+    const m = msg.text.match(/^\/(\w+)/)
+    if (m && m[1] !== m[1].toLowerCase()) msg.text = m[1].toLowerCase() + msg.text.slice(m[1].length + 1)
+  }
+  return next()
+})
+
 const HELP = [
   "Finch — a bird that listens in Sherwood Forest.",
   "It snitches on where your tokens really came from.",
