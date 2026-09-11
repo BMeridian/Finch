@@ -106,6 +106,7 @@ const AGENTS = [
   "",
   "3. Bazantic gateway (x402/MPP, metered on Base)",
   "Bazantic Recipe, FINCH_GRAPH_ENS, chains /query + /ens.",
+  "/bazRep — runs FINCH_GRAPH_ENS",
   "",
   "Every response carries confidence: \"signal only - not a recommendation\". Candidate tokens are correlational, never causal — and the true source can be absent entirely (treasury buys the asset and airdrops it). Only Pons is indexed; for status see /health.",
   "",
@@ -114,8 +115,6 @@ const AGENTS = [
   "Watch it happen — turn on a live feed of agent calls in this chat:",
   "/seeAgent — full record (caller, question, answer)",
   "/agentOff — stop",
-  "",
-  "/bazRep — run Bazantic recipe FINCH_GRAPH_ENS",
 ].join("\n")
 
 bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP) })
