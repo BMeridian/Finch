@@ -1,5 +1,6 @@
 import { Bot } from "grammy"
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
+import { spawn } from "node:child_process"
 import { answer } from "./answer.js"
 import { getWallet, setWallet, clearWallet, getMode, setMode, getBazrep, setBazrep } from "./session.js"
 import { setSeeMode, seeMode, callStats, tailCalls, callLogSize, type CallRecord } from "./calllog.js"
@@ -135,6 +136,18 @@ bot.command("help", (ctx) => ctx.reply(HELP))
 bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }))
 bot.command(["foragents", "api"], (ctx) => ctx.reply(agentsText(), { link_preview_options: { is_disabled: true } }))
 bot.command("ping", (ctx) => ctx.reply("pong"))
+
+// /agentCall1 — fire a real paid Bazantic gateway call as a background agent
+// would, with no reply shown here. Discover the endpoint, then a real x402
+// call ($0.00001 USDC, Base) settled from the "finch" grant. The point is the
+// live /seeAgentFull feed picking it up as an incoming agent call, not this
+// chat's own reply — this command is deliberately blind.
+bot.command("agentcall1", (ctx) => {
+  const cmd = `ENDPOINT=$(baz gateway list --json | python3 -c 'import sys,json; xs=[g["endpointUrl"] for g in json.load(sys.stdin)["listings"] if g["name"]=="Finch" and g["status"]=="active"]; print(xs[0] if xs else "")'); [ -n "$ENDPOINT" ] && baz curl "$ENDPOINT/query?q=graduated+pons+tokens+SPCX&format=prose" --account finch --max-amount 0.02 --yes --json`
+  const child = spawn("bash", ["-lc", cmd], { detached: true, stdio: "ignore" })
+  child.unref()
+  return ctx.reply("agentCall1 fired — blind, no output here. Watch /seeAgentFull.")
+})
 
 // /bazrep — run the PUBLISHED Bazantic recipe FINCH_GRAPH_ENS. Bazantic drives
 // an LLM that chains Finch's own paid gateway tools (finchQuery -> ensResolve)
