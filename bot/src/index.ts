@@ -42,7 +42,6 @@ const HELP = [
   "   /launches                recent launches",
   "   /launches NVDA           …paired against NVDA  (or Pons25, or FinchTop)",
   "   /grads NVDA              graduated only (now on a Uniswap V4 pool)",
-  "   <token address> graduated?   check one token",
   "",
   "BAZANTIC RECIPE",
   "   /bazRep              FINCH_GRAPH_ENS — paid LLM gateway calls",
