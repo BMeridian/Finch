@@ -96,7 +96,9 @@ fn map_raw(params: String, block: eth::Block) -> Result<finch::Events, Error> {
                 continue;
             }
 
-            // Uniswap V4 PoolManager — Initialize carries the hook, filter here.
+            // Uniswap V4 used here — decoding the singleton PoolManager's own
+            // events (Initialize, Swap below), not a per-pool contract.
+            // Initialize carries the hook, filter here.
             if let Some(e) = abi::pool_manager::events::Initialize::match_and_decode(log) {
                 if e.hooks != c.hook { continue; }
                 let (c0, c1) = (e.currency0.to_vec(), e.currency1.to_vec());
