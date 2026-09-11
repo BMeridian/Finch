@@ -147,7 +147,7 @@ bot.command("agentcall1", (ctx) => {
   const cmd = `ENDPOINT=$(baz gateway list --json | python3 -c 'import sys,json; xs=[g["endpointUrl"] for g in json.load(sys.stdin)["listings"] if g["name"]=="Finch" and g["status"]=="active"]; print(xs[0] if xs else "")'); [ -n "$ENDPOINT" ] && baz curl "$ENDPOINT/query?q=graduated+pons+tokens+SPCX&format=prose" --account finch --max-amount 0.02 --yes --json`
   const child = spawn("bash", ["-lc", cmd], { detached: true, stdio: "ignore" })
   child.unref()
-  return ctx.reply("agentCall1 fired — blind, no output here. Watch /seeAgentFull.")
+  return ctx.reply("agentCall1 fired — Blind, no output here. Watch /seeAgentFull.")
 })
 
 // /bazrep — run the PUBLISHED Bazantic recipe FINCH_GRAPH_ENS. Bazantic drives
