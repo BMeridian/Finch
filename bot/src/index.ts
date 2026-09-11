@@ -303,8 +303,8 @@ async function pumpWatch() {
         const s = settlements[si++]
         if (s) settleBlock = Math.max(settleBlock, s.block)
         const paid = s
-          ? `   💸 <b>$${(+s.amount_usdc).toString()}</b> x402 · tx ${feedEsc(s.tx.slice(0, 10) + "…" + s.tx.slice(-6))} (Base)`
-          : `   💸 <b>$0.00001</b> x402 (Base)`
+          ? `   💸 <b>$${(+s.amount_usdc).toString()} x402</b> · tx ${feedEsc(s.tx.slice(0, 10) + "…" + s.tx.slice(-6))} (Base)`
+          : `   💸 <b>$0.00001 x402</b> (Base)`
         msg = msg.includes("\n") ? msg.replace("\n", "\n" + paid + "\n") : msg + "\n" + paid
       }
       await bot.api.sendMessage(w.chatId, msg, { parse_mode: "HTML" })
