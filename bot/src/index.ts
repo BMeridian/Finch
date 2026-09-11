@@ -23,7 +23,7 @@ bot.use((ctx, next) => {
   const msg = ctx.message
   if (msg?.text?.startsWith("/")) {
     const m = msg.text.match(/^\/(\w+)/)
-    if (m && m[1] !== m[1].toLowerCase()) msg.text = m[1].toLowerCase() + msg.text.slice(m[1].length + 1)
+    if (m && m[1] !== m[1].toLowerCase()) msg.text = "/" + m[1].toLowerCase() + msg.text.slice(m[1].length + 1)
   }
   return next()
 })
