@@ -58,19 +58,62 @@ export async function runFinchGraphEns(wallet: string, symbol?: string): Promise
     const txt = call?.result?.content?.[0]?.text
     try { out = JSON.parse(txt).output ?? txt } catch { out = String(txt ?? "(no output)") }
   }
-  return { output: tidy(out), gateway: gw }
+  return { output: reshape(out), gateway: gw }
 }
 
-// The recipe LLM adds chatter despite the prompt — a "Perfect! …" preamble, a
-// trailing confidence paragraph, `---` rules. Strip all of it.
-function tidy(s: string): string {
+const shortAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a) ? `${a.slice(0, 6)}…${a.slice(-4)}` : a
+// Shorten every full 0x address appearing anywhere in a string, in place.
+const shortenAddrs = (s: string) => s.replace(/0x[0-9a-fA-F]{40}/g, shortAddr)
+
+// The recipe LLM doesn't reliably follow the prompt's output format — seen: a
+// "Perfect! …" preamble, a trailing confidence paragraph, full JSON dumps with
+// unshortened addresses instead of the plain-text lines asked for. Rather than
+// chase prompt wording every time it drifts, parse defensively: if the model
+// handed back its own ad-hoc JSON shape, rebuild the canonical short form from
+// it; otherwise fall back to text-cleaning + shortening any raw addresses left
+// in prose output.
+interface RecipeJson {
+  line_1?: string
+  route_addresses?: { address: string; ens?: string | string[] }[]
+  other_ens_names?: { name: string; address: string }[]
+}
+
+function fromJsonShape(s: string): string | null {
+  const m = s.match(/\{[\s\S]*\}/)
+  if (!m) return null
+  let j: RecipeJson
+  try { j = JSON.parse(m[0]) } catch { return null }
+  if (!j.line_1 && !j.route_addresses) return null
+
+  const lines: string[] = []
+  if (j.line_1) lines.push(shortenAddrs(j.line_1))
+  for (const r of j.route_addresses ?? []) {
+    const ens = Array.isArray(r.ens) ? r.ens.join(", ") : (r.ens || "no ENS name")
+    lines.push(`${shortAddr(r.address)}: ${ens}`)
+  }
+  const others = j.other_ens_names ?? []
+  if (others.length) {
+    const byAddr = new Map<string, string[]>()
+    for (const o of others) (byAddr.get(o.address) ?? byAddr.set(o.address, []).get(o.address)!).push(o.name)
+    lines.push("")
+    lines.push("ENS names found in the batch:")
+    lines.push([...byAddr].map(([a, names]) => `${names.join(", ")} → ${shortAddr(a)}`).join(", "))
+  }
+  return lines.join("\n")
+}
+
+function reshape(s: string): string {
+  const fromJson = fromJsonShape(s)
+  if (fromJson) return fromJson
+
   let t = s
   const cut = t.search(/\n[ \t]*[*_#>-]*[ \t]*(important[ :_*]*note|note[ :]|confidence|disclaimer|caveat|signal only|not a recommendation)/i)
   if (cut > 0) t = t.slice(0, cut)
   t = t
-    .replace(/^\s*(perfect|great|got it|here('?s| are| is)|now i (have|can)|the (results?|answer)|summary)\b[^\n]*\n+/im, "")
+    .replace(/^\s*(perfect|great|got it|here('?s| are| is)|now i('| a)?ll?\b|now i (have|can|will)|the (results?|answer)|summary)\b[^\n]*\n+/im, "")
     .replace(/^[-*_\s]*\n+/, "")           // leading rule / blank
     .replace(/\n[-*_\s]*$/g, "")           // trailing rule
     .trim()
-  return t || s.trim()
+  t = shortenAddrs(t)
+  return t || shortenAddrs(s.trim())
 }
