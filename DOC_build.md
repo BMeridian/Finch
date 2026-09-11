@@ -126,7 +126,8 @@ subgraph-era commit; everything below is the pivot and after.
   Substreams-sink Postgres. `bot/src/subgraph.ts` deleted;
   `query.ts` / `freshness.ts` / `candidates.ts` / `format.ts` / `serialize.ts` /
   `ens.ts` rewritten GraphQL→SQL against `bot/src/db.ts` (`pg` pool + `sql()`).
-- `05188a5` `deploy/finch-sink.service` + `DOC_substreams.md`.
+- `05188a5` `deploy/finch-sink.service` + `substreams/DOC_substreams.md`
+  (sink runbook — note: do NOT truncate the `_sink_info_` meta tables, drop them).
 - `009619b` → `5d714f3` brief two-source phase (Substreams sink + a Goldsky
   seed for history) then **Goldsky dropped entirely** — dev-rel confirmed
   Goldsky-seeded data does not qualify for the Graph track. Sink is now pure
@@ -207,3 +208,9 @@ subgraph-era commit; everything below is the pivot and after.
 - [ ] `/health` route price in the Bazantic dashboard — confirm it's `0` so
       uptime probes stay free.
 - [ ] `DOC_prompt.md` — mark superseded or delete (kept for now as history).
+- [ ] `CLAUDE.md` Status still says `finch-substreams@v0.1.0` and
+      `PRUNE_WINDOW_BLOCKS` 250k in places — live is **v0.1.1** and the box sets
+      120k. `substreams/finch-substreams-v0.1.0.spkg` is also still in the tree.
+- [ ] Watch-list sync note in `CLAUDE.md` names `subgraph/src/constants.ts` — the
+      subgraph is dead; the live sync points are `substreams/substreams.yaml`
+      (`tokens=` / `pairing=`) and `bot/src/tokens.ts`.
