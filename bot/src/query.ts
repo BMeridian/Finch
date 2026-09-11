@@ -68,7 +68,7 @@ export async function runQuery(p: Parsed): Promise<QueryResult> {
     if (groupSet) { params.push(groupSet); conds.push(`lower(l.pair_token) = any($${params.length})`) }
     if (p.onlyGraduated) conds.push(`g.token is not null`)
     const rows = await sql<LaunchRow>(
-      `${LAUNCH_SELECT} where ${conds.join(" and ")} order by l.timestamp desc limit 12`, params,
+      `${LAUNCH_SELECT} where ${conds.join(" and ")} order by l.timestamp desc limit 10`, params,
     )
     return { kind: "launches", launches: rows }
   }
