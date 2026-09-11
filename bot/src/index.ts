@@ -58,6 +58,7 @@ const HELP = [
   "",
   "BAZANTIC RECIPE",
   "   /bazRep              FINCH_GRAPH_ENS — paid LLM gateway calls",
+  "   /agentCall1          fire a blind paid x402 call, watch /seeAgentFull",
   "",
   "LISTS",
   "   /pons25     top 25 tokenized stocks by on-chain market cap",
