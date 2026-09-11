@@ -218,6 +218,11 @@
                       "null"
                     ]
                   },
+                  "batch_recipients": {
+                    "type": ["array", "null"],
+                    "items": { "type": "string" },
+                    "description": "0x addresses of every recipient in the same payout tx (the epoch batch), including this wallet. Feed these to /ens alongside paid_by_contract and path.route to find which batch-mates have an ENS name."
+                  },
                   "path": {
                     "type": ["object", "null"],
                     "description": "Confirmed route when the payer's quoteToken() is the received asset: fee currency of the named token's Uniswap V4 pool → Pons FeeEscrow → distributor → epoch batch. Recipient selection per epoch is not on-chain-readable."

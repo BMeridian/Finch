@@ -171,17 +171,22 @@ Inputs: a wallet address {{inputs.wallet}} and a token symbol {{inputs.symbol}}
 
 1. Call finchQuery with wallet=<that address>, q="why did I get {{inputs.symbol}}",
    format=json. Take: token received (event.token_received, event.amount), the
-   paying contract (event.paid_by_contract), and the route (path.route — strings
-   with 0x addresses). If event is null, say the wallet has no {{inputs.symbol}}
-   in Finch's indexed range and stop.
+   paying contract (event.paid_by_contract), the route (path.route — strings with
+   0x addresses), and the epoch batch (event.batch_recipients — 0x addresses of
+   every wallet paid in the same tx, including this one). If event is null, say
+   the wallet has no {{inputs.symbol}} in Finch's indexed range and stop.
 2. Build a comma-separated list of every distinct 0x address: the wallet,
-   event.paid_by_contract, and each 0x in path.route.
+   event.paid_by_contract, each 0x in path.route, and each address in
+   event.batch_recipients.
 3. Call ensResolve with addresses=<that list>. Returns `resolved` (address -> .eth
-   names) and `unresolved` (Robinhood Chain contracts, no name).
+   names) and `unresolved` (Robinhood Chain contracts or unnamed wallets).
 4. Answer, nothing else: one line "<wallet .eth or short 0x> received <amount>
    <token>, routed through <payer .eth or short 0x>", then each route address ->
-   its .eth name(s) or "no ENS name". No preamble, no notes, no confidence or
-   disclaimer paragraph — Finch's JSON already carries that and the caller strips it.
+   its .eth name(s) or "no ENS name", then a line "ENS names found in the batch:"
+   listing every OTHER batch_recipients address that resolved (name -> short 0x);
+   omit that line entirely if none resolved. No preamble, no notes, no confidence
+   or disclaimer paragraph — Finch's JSON already carries that and the caller
+   strips it.
 
 Never give trading advice.
 ```

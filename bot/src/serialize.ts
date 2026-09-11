@@ -121,6 +121,7 @@ export async function toJson(p: Parsed, q: QueryResult): Promise<Record<string, 
       age_seconds: Math.max(0, Math.floor(Date.now() / 1000) - Number(r.timestamp)),
       paid_by_contract: D,
       recipients_in_tx: batch.length || rc || null,
+      batch_recipients: batch.length ? batch.map(x => x.to) : null,
       source_label: r.fromLabel ?? null,
     },
     recurring: {
