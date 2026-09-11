@@ -186,15 +186,16 @@ told to try `/bazRep` again.
 **Prompt** (verbatim):
 
 ```
-Inputs: a wallet address {{inputs.wallet}} and a token symbol {{inputs.symbol}}
-(default NVDA if not given).
+Inputs: {{inputs}} — an object with a wallet address (`wallet` or `Wallet`) and,
+optionally, a token symbol (`symbol` or `Symbol`; default NVDA if not given).
 
-1. Call finchQuery with wallet=<that address>, q="why did I get {{inputs.symbol}}",
-   format=json. Take: token received (event.token_received, event.amount), the
-   paying contract (event.paid_by_contract), the route (path.route — strings with
-   0x addresses), and the epoch batch (event.batch_recipients — 0x addresses of
+1. Call finchQuery with wallet=<the wallet from Inputs>, q="why did I get
+   <the symbol from Inputs>", format=json. Take: token received
+   (event.token_received, event.amount), the paying contract
+   (event.paid_by_contract), the route (path.route — strings with 0x
+   addresses), and the epoch batch (event.batch_recipients — 0x addresses of
    every wallet paid in the same tx). If event is null, say the wallet has no
-   {{inputs.symbol}} in Finch's indexed range and stop.
+   activity in that token in Finch's indexed range and stop.
 2. Build a comma-separated list of every distinct 0x address: the wallet,
    event.paid_by_contract, each 0x in path.route, and every address in
    event.batch_recipients.
