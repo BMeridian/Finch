@@ -176,8 +176,8 @@ Inputs: a wallet address {{inputs.wallet}} and a token symbol {{inputs.symbol}}
    every wallet paid in the same tx, including this one). If event is null, say
    the wallet has no {{inputs.symbol}} in Finch's indexed range and stop.
 2. Build a comma-separated list of every distinct 0x address: the wallet,
-   event.paid_by_contract, each 0x in path.route, and each address in
-   event.batch_recipients.
+   event.paid_by_contract, each 0x in path.route, and up to the first 15
+   addresses in event.batch_recipients (skip the rest — keep this call fast).
 3. Call ensResolve with addresses=<that list>. Returns `resolved` (address -> .eth
    names) and `unresolved` (Robinhood Chain contracts or unnamed wallets).
 4. Answer, nothing else: one line "<wallet .eth or short 0x> received <amount>
