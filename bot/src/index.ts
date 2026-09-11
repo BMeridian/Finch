@@ -105,7 +105,7 @@ const AGENTS = [
   "Tools: finch_wallet_provenance, finch_pons_activity, finch_health",
   "",
   "3. Bazantic gateway (x402/MPP, metered on Base)",
-  "Wraps /query + /ens. A published Bazantic Recipe, FINCH_GRAPH_ENS, chains them.",
+  "Bazantic Recipe, FINCH_GRAPH_ENS, chains /query + /ens.",
   "",
   "Every response carries confidence: \"signal only - not a recommendation\". Candidate tokens are correlational, never causal — and the true source can be absent entirely (treasury buys the asset and airdrops it). Only Pons is indexed; for status see /health.",
   "",
