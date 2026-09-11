@@ -208,9 +208,5 @@ subgraph-era commit; everything below is the pivot and after.
 - [ ] `/health` route price in the Bazantic dashboard — confirm it's `0` so
       uptime probes stay free.
 - [ ] `DOC_prompt.md` — mark superseded or delete (kept for now as history).
-- [ ] `CLAUDE.md` Status still says `finch-substreams@v0.1.0` and
-      `PRUNE_WINDOW_BLOCKS` 250k in places — live is **v0.1.1** and the box sets
-      120k. `substreams/finch-substreams-v0.1.0.spkg` is also still in the tree.
-- [ ] Watch-list sync note in `CLAUDE.md` names `subgraph/src/constants.ts` — the
-      subgraph is dead; the live sync points are `substreams/substreams.yaml`
-      (`tokens=` / `pairing=`) and `bot/src/tokens.ts`.
+- [ ] `substreams/finch-substreams-v0.1.0.spkg` — old package still in the tree,
+      can be removed (live is `v0.1.1`).
