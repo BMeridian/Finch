@@ -46,7 +46,6 @@ const HELP = [
   "",
   "BAZANTIC RECIPE",
   "   /bazRep              FINCH_GRAPH_ENS — paid LLM gateway calls",
-  "   /bazRep 0x… NVDA     one-liner form",
   "",
   "LISTS",
   "   /pons25     top 25 tokenized stocks by on-chain market cap",
