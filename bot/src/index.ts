@@ -37,13 +37,13 @@ const HELP = [
   "/forAgents  how agents call Finch (HTTP / MCP / Bazantic)",
   "",
   "",
-  "① SET YOUR WALLET (once)",
+  "① <b>SET YOUR WALLET</b> (once)",
   "   /account 0x…",
   "   try it:",
   "   /account 0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0",
   "   /account 0x36de68e810781dd7699d8fc7fe7def8aae51cec2",
   "",
-  "② ASK:  why did I get NVDA?",
+  "② <b>ASK QUESTION</b>:  why did I get NVDA?",
   "   NVDA                ← just the symbol",
   "   /trace NVDA         ← adds the tx route + path",
   "   /traceENS NVDA      ← + ENS names for the wallets in the path",
@@ -132,8 +132,8 @@ const AGENTS = [
   "/agentOff — stop",
 ].join("\n")
 
-bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP) })
-bot.command("help", (ctx) => ctx.reply(HELP))
+bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP, { parse_mode: "HTML" }) })
+bot.command("help", (ctx) => ctx.reply(HELP, { parse_mode: "HTML" }))
 bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }))
 bot.command(["foragents", "api"], (ctx) => ctx.reply(agentsText(), { link_preview_options: { is_disabled: true } }))
 bot.command("ping", (ctx) => ctx.reply("pong"))
