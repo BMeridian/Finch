@@ -53,7 +53,7 @@
             "in": "query",
             "required": false,
             "schema": { "type": "string", "enum": ["1"] },
-            "description": "ens=1 (json format only): resolve the wallet, paying contract, path.route addresses, and event.batch_recipients to ENS names in this same call, returned as event.ens_names (address -> .eth names, only addresses that resolved). Avoids a second ensResolve round trip."
+            "description": "ens=1 (json format only): resolve the wallet, paying contract, path.route addresses, and the full epoch batch (looked up server-side from event.tx) to ENS names in this same call, returned as event.ens_names (address -> .eth names, only addresses that resolved). Avoids a second ensResolve round trip."
           }
         ],
         "responses": {
@@ -119,14 +119,21 @@
     "/ens": {
       "get": {
         "operationId": "ensResolve",
-        "summary": "Reverse-resolve 0x addresses to .eth names via The Graph's canonical ENS subgraph. Feed it the hex addresses from a /query provenance answer (event.paid_by_contract, the addresses in path.route).",
+        "summary": "Reverse-resolve 0x addresses to .eth names via The Graph's canonical ENS subgraph. Feed it the hex addresses from a /query provenance answer (event.paid_by_contract, the addresses in path.route), and/or a tx hash to resolve its whole recipient batch without listing each address yourself.",
         "parameters": [
           {
             "name": "addresses",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": { "type": "string" },
-            "description": "comma-separated 0x addresses, e.g. 0xabc…,0xdef…"
+            "description": "comma-separated 0x addresses, e.g. 0xabc…,0xdef…. Optional if batch_tx is given."
+          },
+          {
+            "name": "batch_tx",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "a tx hash (e.g. event.tx from /query) — resolves every recipient of that tx server-side, merged with `addresses`. Use this instead of enumerating event.batch_recipients yourself: an LLM caller re-typing 40+ addresses as this call's arguments is what pushed a chained finchQuery->ensResolve recipe over Bazantic's ~30s timeout."
           }
         ],
         "responses": {
@@ -225,11 +232,6 @@
                       "string",
                       "null"
                     ]
-                  },
-                  "batch_recipients": {
-                    "type": ["array", "null"],
-                    "items": { "type": "string" },
-                    "description": "0x addresses of every recipient in the same payout tx (the epoch batch), including this wallet. Feed these to /ens alongside paid_by_contract and path.route to find which batch-mates have an ENS name."
                   },
                   "path": {
                     "type": ["object", "null"],

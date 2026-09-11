@@ -5,6 +5,7 @@ import { logCall, recentCalls, callStats, setSeeMode, seeMode } from "./calllog.
 import { freshness } from "./freshness.js"
 import { verifyPayment } from "./x402.js"
 import { resolveEns } from "./ens.js"
+import { sql } from "./db.js"
 
 // Finch's HTTP API — the thing the Bazantic x402/MPP Gateway wraps. Any agent
 // calls this directly too (Finch is a peer, not a gatekeeper). Every request is
@@ -54,8 +55,22 @@ const server = createServer(async (req, res) => {
     // pairs with /query — feed it the hex addresses from a provenance answer.
     const raw = url.searchParams.get("addresses") || url.searchParams.get("a") || ""
     const addrs = raw.split(",").map(s => s.trim().toLowerCase()).filter(a => /^0x[0-9a-f]{40}$/.test(a))
-    if (!addrs.length) return send(400, { error: "pass ?addresses=0x…,0x… (comma-separated)" })
-    const resolved = await resolveEns(addrs).catch(() => ({} as Record<string, string[]>))
+    // batch_tx: expand to every recipient of that tx server-side, instead of
+    // making an LLM caller enumerate (and pay generation time for) each one.
+    // A Bazantic recipe chaining finchQuery -> ensResolve was consistently
+    // running ~48s once it had to type out a ~50-address epoch batch as this
+    // call's arguments — over the recipe gateway's ~30s hard timeout. Passing
+    // the tx hash keeps this call's argument size constant regardless of how
+    // many wallets were paid in that tx.
+    const batchTx = url.searchParams.get("batch_tx")
+    if (batchTx) {
+      const rows = await sql<{ to: string }>(`select "to" from transfer where lower(tx_hash) = lower($1) limit 1000`, [batchTx])
+        .catch(() => [] as { to: string }[])
+      for (const r of rows) if (/^0x[0-9a-f]{40}$/.test(r.to.toLowerCase())) addrs.push(r.to.toLowerCase())
+    }
+    const uniq = [...new Set(addrs)]
+    if (!uniq.length) return send(400, { error: "pass ?addresses=0x…,0x… and/or ?batch_tx=0x… (comma-separated addresses, plus optionally the tx to expand into its full recipient batch)" })
+    const resolved = await resolveEns(uniq).catch(() => ({} as Record<string, string[]>))
     // unresolved as a count, not an itemized list — an agent (or LLM recipe)
     // only needs "is this specific address a key in resolved?", and an
     // exhaustive echo of 40+ addresses that didn't resolve just bloats the
@@ -63,8 +78,8 @@ const server = createServer(async (req, res) => {
     return send(200, {
       source: "The Graph — canonical ENS subgraph (mainnet)",
       resolved,
-      checked: addrs.length,
-      unresolved_count: addrs.length - Object.keys(resolved).length,
+      checked: uniq.length,
+      unresolved_count: uniq.length - Object.keys(resolved).length,
     })
   }
   if (url.pathname === "/SKILL.md" || url.pathname === "/skill") {
@@ -111,11 +126,14 @@ const server = createServer(async (req, res) => {
       if (wantsEns && fmt !== "prose") {
         const j = result as Record<string, any>
         if (j.event) {
+          const batch = j.event.tx
+            ? await sql<{ to: string }>(`select "to" from transfer where lower(tx_hash) = lower($1) limit 1000`, [j.event.tx]).catch(() => [])
+            : []
           const addrs = [
             wallet,
             j.event.paid_by_contract,
             ...(Array.isArray(j.path?.route) ? j.path.route.flatMap((s: string) => s.match(/0x[0-9a-fA-F]{40}/g) ?? []) : []),
-            ...(Array.isArray(j.event.batch_recipients) ? j.event.batch_recipients : []),
+            ...batch.map(b => b.to),
           ].filter(Boolean) as string[]
           j.event.ens_names = await resolveEns(addrs).catch(() => ({}))
         }

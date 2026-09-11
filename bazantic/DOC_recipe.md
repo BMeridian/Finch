@@ -164,22 +164,23 @@ finchQuery (Finch / Substreams)          ensResolve (Finch / The Graph ENS subgr
 
 Bazantic's recipe gateway enforces a **hard ~30s reverse-proxy timeout** on the
 whole run — confirmed directly: `curl` to the recipe-mcp gateway returned `504
-"upstream timeout"` at ~30.1–30.3s, likely LLM-generation time (building the
-`ensResolve` argument list means re-typing every batch address), not network
-latency. Two fixes considered and rejected:
-- Collapsing to one `finchQuery(ens=1)` call — defeats the point of a Recipe
-  (the track wants a real LLM-orchestrated multi-tool chain).
-- Capping `event.batch_recipients` to a fixed N — tried 15 and 20 addresses,
-  both silently missed the wallet's actual named batch-mates (they happened to
-  sort past the cutoff). A cap trades correctness for speed with no way to
-  know in advance which addresses it drops.
+"upstream timeout"` at ~30.1–30.3s. A real end-to-end run through the gateway
+took **48s** — consistently and substantially over the limit, not occasional
+flakiness; retrying doesn't help and was the wrong fix. The cause was LLM
+*generation* time, not network latency: step 2 required the model to re-type
+every one of ~50 epoch-batch addresses as `ensResolve`'s arguments, after
+first reading that same list out of `finchQuery`'s result. That cost scales
+with batch size, so any batch small enough to be fast (tried capping at 15,
+then 20) was also small enough to miss the wallet's actual named batch-mates.
 
-Instead `event.batch_recipients` stays **uncapped** (correctness preserved),
-and `bot/src/index.ts` `runBazrep()` **retries the whole recipe once**,
-visibly, if the first attempt hits the gateway timeout — LLM generation speed
-has some variance, so a second attempt has a real chance of finishing under
-30s even at full batch size. Worst case (both attempts time out) the user is
-told to try `/bazRep` again.
+**The fix: `ensResolve` now takes a `batch_tx` parameter** and expands the
+full recipient batch server-side (`bot/src/http.ts`), instead of requiring the
+caller to enumerate it. `finchQuery`'s response no longer even includes the
+batch address array — the model never reads or re-types it. Both tool calls'
+argument sizes are now constant regardless of batch size (a handful of route
+addresses, one tx hash), while resolution coverage is still the full batch.
+This keeps the recipe genuinely two LLM-orchestrated tool calls — the fix is
+in what each call's payload contains, not in how many calls there are.
 
 **Inputs:** `wallet` (required), `symbol` (optional, default NVDA).
 
@@ -193,22 +194,22 @@ optionally, a token symbol (`symbol` or `Symbol`; default NVDA if not given).
    <the symbol from Inputs>", format=json. Take: token received
    (event.token_received, event.amount), the paying contract
    (event.paid_by_contract), the route (path.route — strings with 0x
-   addresses), and the epoch batch (event.batch_recipients — 0x addresses of
-   every wallet paid in the same tx). If event is null, say the wallet has no
-   activity in that token in Finch's indexed range and stop.
-2. Build a comma-separated list of every distinct 0x address: the wallet,
-   event.paid_by_contract, each 0x in path.route, and every address in
-   event.batch_recipients.
-3. Call ensResolve with addresses=<that list>. Returns `resolved` (address -> .eth
-   names, only the addresses that actually resolved) and `unresolved_count` (a
-   number, not a list — an address not present in `resolved` has no ENS name).
-4. Answer, nothing else: one line "<wallet .eth or short 0x> received <amount>
+   addresses), and the tx hash (event.tx). If event is null, say the wallet
+   has no activity in that token in Finch's indexed range and stop.
+2. Call ensResolve with addresses=<the wallet, event.paid_by_contract, and
+   every 0x in path.route, comma-separated> and batch_tx=<event.tx>. This
+   resolves that short list PLUS every other wallet paid in the same tx —
+   you do not need to list them yourself. Returns `resolved` (address -> .eth
+   names, only the addresses that actually resolved) and `unresolved_count`
+   (a number, not a list — an address not present in `resolved` has no ENS
+   name).
+3. Answer, nothing else: one line "<wallet .eth or short 0x> received <amount>
    <token>, routed through <payer .eth or short 0x>", then each route address ->
    its .eth name(s) or "no ENS name" (check membership in `resolved`), then a
-   line "ENS names found in the batch:" listing every OTHER address from
-   event.batch_recipients that is a key in `resolved` (name -> short 0x); omit
-   that line entirely if none are. No preamble, no notes, no confidence or
-   disclaimer paragraph — Finch's JSON already carries that and the caller
+   line "Other ENS names found in the same payout:" listing every OTHER
+   address in `resolved` you did not already name above (name -> short 0x);
+   omit that line entirely if none are. No preamble, no notes, no confidence
+   or disclaimer paragraph — Finch's JSON already carries that and the caller
    strips it.
 
 Never give trading advice.
