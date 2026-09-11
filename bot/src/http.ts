@@ -56,10 +56,15 @@ const server = createServer(async (req, res) => {
     const addrs = raw.split(",").map(s => s.trim().toLowerCase()).filter(a => /^0x[0-9a-f]{40}$/.test(a))
     if (!addrs.length) return send(400, { error: "pass ?addresses=0x…,0x… (comma-separated)" })
     const resolved = await resolveEns(addrs).catch(() => ({} as Record<string, string[]>))
+    // unresolved as a count, not an itemized list — an agent (or LLM recipe)
+    // only needs "is this specific address a key in resolved?", and an
+    // exhaustive echo of 40+ addresses that didn't resolve just bloats the
+    // context an LLM caller has to read before it can answer.
     return send(200, {
       source: "The Graph — canonical ENS subgraph (mainnet)",
       resolved,
-      unresolved: addrs.filter(a => !resolved[a]),
+      checked: addrs.length,
+      unresolved_count: addrs.length - Object.keys(resolved).length,
     })
   }
   if (url.pathname === "/SKILL.md" || url.pathname === "/skill") {

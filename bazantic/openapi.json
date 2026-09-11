@@ -135,7 +135,8 @@
                       "type": "object",
                       "additionalProperties": { "type": "array", "items": { "type": "string" } }
                     },
-                    "unresolved": { "type": "array", "items": { "type": "string" } }
+                    "checked": { "type": "integer" },
+                    "unresolved_count": { "type": "integer", "description": "addresses passed in that are not a key in `resolved` — an itemized list is omitted on purpose to keep this response small for LLM callers" }
                   }
                 }
               }

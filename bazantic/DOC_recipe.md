@@ -180,14 +180,16 @@ Inputs: a wallet address {{inputs.wallet}} and a token symbol {{inputs.symbol}}
    event.batch_recipients — do not truncate this list, ensResolve handles it
    in one call regardless of size.
 3. Call ensResolve with addresses=<that list>. Returns `resolved` (address -> .eth
-   names) and `unresolved` (Robinhood Chain contracts or unnamed wallets).
+   names, only the addresses that actually resolved) and `unresolved_count` (a
+   number, not a list — an address not present in `resolved` has no ENS name).
 4. Answer, nothing else: one line "<wallet .eth or short 0x> received <amount>
    <token>, routed through <payer .eth or short 0x>", then each route address ->
-   its .eth name(s) or "no ENS name", then a line "ENS names found in the batch:"
-   listing every OTHER batch_recipients address that resolved (name -> short 0x);
-   omit that line entirely if none resolved. No preamble, no notes, no confidence
-   or disclaimer paragraph — Finch's JSON already carries that and the caller
-   strips it.
+   its .eth name(s) or "no ENS name" (check membership in `resolved`, nothing
+   else), then a line "ENS names found in the batch:" listing every OTHER
+   address from `resolved` that came from event.batch_recipients (name -> short
+   0x); omit that line entirely if `resolved` has no such address. No preamble,
+   no notes, no confidence or disclaimer paragraph — Finch's JSON already
+   carries that and the caller strips it.
 
 Never give trading advice.
 ```
