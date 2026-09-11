@@ -59,7 +59,6 @@ call through.
 ```
 /substreams  - LIVE data source: Substreams module + finch.proto + spkg
                (published: finch-substreams@v0.1.1). map_bot is the sunk module.
-/subgraph    - Dead AssemblyScript subgraph — not read by anything. History only.
 /bot         - Telegram bot + NLI backend + HTTP API (independent processes)
   src/index.ts     - Telegram bot (grammy); /start /trace /traceENS /bazRep /seeAgent …
   src/http.ts      - HTTP API (the endpoint Bazantic wraps): /query /ens /health /calls /x402/verify /SKILL.md

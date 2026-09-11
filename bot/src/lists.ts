@@ -2,7 +2,7 @@ import { KNOWN_SYMBOLS } from "./tokens.js"
 import { PONS25, pons25Text } from "./pons25.js"
 
 // FinchTop — reflect the actual WATCHED list (bot/src/tokens.ts mirrors
-// subgraph/src/constants.ts WATCHED). No lookup, no new data.
+// substreams/substreams.yaml's tokens= param). No lookup, no new data.
 export function finchTopText(): string {
   const s = KNOWN_SYMBOLS
   const wrapped: string[] = []
