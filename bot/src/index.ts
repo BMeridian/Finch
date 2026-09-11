@@ -143,14 +143,20 @@ async function runBazrep(ctx: any, wallet: string, symbol?: string) {
   setBazrep(ctx.chat.id, undefined)
   await ctx.replyWithChatAction("typing")
   await ctx.reply("Running Bazantic recipe <b>FINCH_GRAPH_ENS</b> … (LLM chains finchQuery → ensResolve, ~40s)", { parse_mode: "HTML" })
-  try {
-    const r = await runFinchGraphEns(wallet, symbol)
-    await ctx.reply(
-      `<b>Bazantic recipe · FINCH_GRAPH_ENS</b>  <i>${feedEsc(r.gateway.replace(/^https:\/\//, ""))}</i>\n\n` +
-      feedEsc(r.output).slice(0, 3500),
-      { parse_mode: "HTML", link_preview_options: { is_disabled: true } })
-  } catch (e) {
-    await ctx.reply(`recipe failed: ${feedEsc(String(e))} — try again, the recipe gateway's upstream timeout is flaky`)
+  // Bazantic's recipe gateway has a hard ~30s timeout that a full epoch batch
+  // sometimes runs over (LLM-generation time, not network latency) — retry
+  // the whole recipe once, visibly, rather than silently eating the loss.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const r = await runFinchGraphEns(wallet, symbol)
+      return await ctx.reply(
+        `<b>Bazantic recipe · FINCH_GRAPH_ENS</b>  <i>${feedEsc(r.gateway.replace(/^https:\/\//, ""))}</i>\n\n` +
+        feedEsc(r.output).slice(0, 3500),
+        { parse_mode: "HTML", link_preview_options: { is_disabled: true } })
+    } catch (e) {
+      if (attempt === 1) { await ctx.reply("First attempt hit the gateway's timeout — retrying once…"); continue }
+      await ctx.reply(`recipe failed twice: ${feedEsc(String(e))} — try /bazRep again in a moment`)
+    }
   }
 }
 

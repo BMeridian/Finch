@@ -43,10 +43,13 @@ export async function runFinchGraphEns(wallet: string, symbol?: string): Promise
   const gw = init?.result?._meta?.["com.bazantic/recipe"]?.gateway_mcp_url
   if (!gw) throw new Error("no recipe gateway from Bazantic")
 
+  // tries=1: a single slow recipe run already costs ~30s; the caller
+  // (runBazrep) retries the whole recipe once, visibly, rather than this
+  // silently repeating the identical slow call 3x before ever reporting back.
   const call = await rpc(gw, {
     jsonrpc: "2.0", id: 2, method: "tools/call",
     params: { name: RECIPE_HANDLE, arguments: { Wallet: wallet, ...(symbol ? { Symbol: symbol } : {}) } },
-  })
+  }, 35_000, 1)
   if (call?.error) throw new Error(call.error.message || "recipe error")
   const sc = call?.result?.structuredContent?.output
   let out: string
