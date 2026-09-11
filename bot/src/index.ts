@@ -73,7 +73,7 @@ const PROCESS = [
   "",
   "Here's how it happens. Someone launches a memecoin on Pons. It graduates to a Uniswap V4 pool paired against a stock. The creator redirects their fee cut — paid in that stock — to a holder-fee distributor. The distributor pays it out to holders.",
   "",
-  "Your wallet just sees \"+0.09 NVDA from 0xe25e…\". No block explorer tells you which memecoin that came from, or why you. Finch reconstructs the route.",
+  "Your wallet just sees \"+0.09 NVDA from 0xe25e…\". <b>No block explorer</b> tells you which memecoin that came from, or <b>why you</b>. Finch reconstructs the route.",
   "",
   "1. FIND THE TRANSFER",
   "The most recent transfer of that token into your wallet — from the Substreams-indexed Postgres store.",
@@ -132,7 +132,7 @@ const AGENTS = [
 
 bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP) })
 bot.command("help", (ctx) => ctx.reply(HELP))
-bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { link_preview_options: { is_disabled: true } }))
+bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }))
 bot.command(["foragents", "api"], (ctx) => ctx.reply(agentsText(), { link_preview_options: { is_disabled: true } }))
 bot.command("ping", (ctx) => ctx.reply("pong"))
 
