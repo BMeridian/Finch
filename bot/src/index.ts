@@ -33,7 +33,7 @@ const HELP = [
   "② ASK:  why did I get NVDA?",
   "   NVDA                ← just the symbol",
   "   /trace NVDA         ← adds the tx route + path",
-  "   /traceENS NVDA      ← …+ ENS names for the wallets in the path",
+  "   /traceENS NVDA      ← + ENS names for the wallets in the path",
   "",
   "   /forget   clear your wallet",
   "   /start    reset",
