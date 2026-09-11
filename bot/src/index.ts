@@ -115,8 +115,7 @@ const AGENTS = [
   "/seeAgent — full record (caller, question, answer)",
   "/agentOff — stop",
   "",
-  "/bazRep — run the published Bazantic recipe FINCH_GRAPH_ENS in this chat",
-  "  (LLM chains finchQuery -> ensResolve; guided prompts, or /bazRep 0x… NVDA)",
+  "/bazRep — run Bazantic recipe FINCH_GRAPH_ENS",
 ].join("\n")
 
 bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP) })
