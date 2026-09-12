@@ -5,10 +5,10 @@
 //
 // Source: robinscan.io/api/stocks (reads Robinhood Chain's on-chain asset
 // registry), cross-checked against docs.robinhood.com/chain/contracts for the
-// address list. Snapshot 2026-09-06 — on-chain market cap moves constantly.
+// address list. Snapshot 2026-08-31 — on-chain market cap moves constantly.
 // Non-stock ecosystem assets (PONS, WETH, USDG, memecoins) are excluded.
 
-export const PONS25_SNAPSHOT = "2026-09-06"
+export const PONS25_SNAPSHOT = "2026-08-31"
 
 export interface Pons25Row { symbol: string; address: string; mcapUsd: number; name: string }
 
