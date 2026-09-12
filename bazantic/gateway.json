@@ -16,7 +16,7 @@
       "path": "/query",
       "methods": ["GET", "POST"],
       "upstream_path": "/query",
-      "pricing": { "model": "x402", "amount": "0.00001", "currency": "USDC", "chain": "eip155:8453", "$comment": "LIVE: 1 MCENT/call. Set in the Bazantic dashboard Resources panel (baz CLI has no pricing subcommand) then PUBLISH. Amount 0 = free/no-402; a nonzero amount engages the x402 challenge. Settles USDC on Base (eip155:8453). A bare /query is a no-op probe (200); a real param gets the 402." },
+      "pricing": { "model": "x402", "amount": "0.001", "currency": "USDC", "chain": "eip155:8453", "$comment": "LIVE price is set in the Bazantic dashboard Resources panel (baz CLI has no pricing subcommand) then PUBLISH — this file is documentation only, not the source of truth. Amount 0 = free/no-402; a nonzero amount engages the x402 challenge. Settles USDC on Base (eip155:8453). A bare /query is a no-op probe (200); a real param gets the 402." },
       "params": {
         "wallet": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$", "required": false },
         "q": { "type": "string", "required": false },

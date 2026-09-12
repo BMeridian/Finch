@@ -67,39 +67,60 @@ const shortenAddrs = (s: string) => s.replace(/0x[0-9a-fA-F]{40}/g, shortAddr)
 
 // The recipe LLM doesn't reliably follow the prompt's output format — seen: a
 // "Perfect! …" preamble, a trailing confidence paragraph, full JSON dumps with
-// unshortened addresses instead of the plain-text lines asked for. Rather than
-// chase prompt wording every time it drifts, parse defensively: if the model
-// handed back its own ad-hoc JSON shape, rebuild the canonical short form from
-// it; otherwise fall back to text-cleaning + shortening any raw addresses left
-// in prose output.
-interface RecipeJson {
-  line_1?: string
-  route_addresses?: { address: string; ens?: string | string[] }[]
-  other_ens_names?: { name: string; address: string }[]
+// unshortened addresses, and a different ad-hoc key name for the same field
+// almost every run (output/answer/result/line_1, route_addresses/route_details,
+// other_ens_names/other_recipients — the last sometimes an array, sometimes a
+// plain "none found" string). Rather than chase the exact key names every time
+// they drift, parse defensively by field ROLE: pick the first key present from
+// a list of names known to have held that role, for whichever shape shows up.
+function pick(o: Record<string, unknown>, keys: string[]): unknown {
+  for (const k of keys) if (o[k] !== undefined) return o[k]
+  return undefined
 }
 
 function fromJsonShape(s: string): string | null {
   const m = s.match(/\{[\s\S]*\}/)
   if (!m) return null
-  let j: RecipeJson
+  let j: Record<string, unknown>
   try { j = JSON.parse(m[0]) } catch { return null }
-  if (!j.line_1 && !j.route_addresses) return null
+  if (typeof j !== "object" || j === null) return null
+
+  const intro = pick(j, ["line_1", "result", "output", "answer", "summary"])
+  const routeArr = pick(j, ["route_addresses", "route_details", "addresses"])
+
+  // No structured route array — the whole prose answer is nested one level
+  // under a single key, sometimes with a stray ```json fence around it.
+  if (!Array.isArray(routeArr)) return typeof intro === "string" ? shortenAddrs(intro) : null
 
   const lines: string[] = []
-  if (j.line_1) lines.push(shortenAddrs(j.line_1))
-  for (const r of j.route_addresses ?? []) {
-    const ens = Array.isArray(r.ens) ? r.ens.join(", ") : (r.ens || "no ENS name")
-    lines.push(`${shortAddr(r.address)}: ${ens}`)
+  if (typeof intro === "string") lines.push(shortenAddrs(intro))
+  for (const r of routeArr) {
+    if (typeof r !== "object" || r === null) continue
+    const addr = pick(r as Record<string, unknown>, ["address", "addr"])
+    const ens = pick(r as Record<string, unknown>, ["ens", "name", "names"])
+    if (typeof addr !== "string") continue
+    const ensStr = Array.isArray(ens) ? ens.join(", ") : (ens || "no ENS name")
+    lines.push(`${shortAddr(addr)}: ${ensStr}`)
   }
-  const others = j.other_ens_names ?? []
-  if (others.length) {
+
+  const others = pick(j, ["other_ens_names", "other_recipients", "other_names"])
+  if (Array.isArray(others) && others.length) {
     const byAddr = new Map<string, string[]>()
-    for (const o of others) (byAddr.get(o.address) ?? byAddr.set(o.address, []).get(o.address)!).push(o.name)
-    lines.push("")
-    lines.push("ENS names found in the batch:")
-    lines.push([...byAddr].map(([a, names]) => `${names.join(", ")} → ${shortAddr(a)}`).join(", "))
+    for (const o of others) {
+      if (typeof o !== "object" || o === null) continue
+      const addr = pick(o as Record<string, unknown>, ["address", "addr"])
+      const name = pick(o as Record<string, unknown>, ["name", "names"])
+      if (typeof addr === "string" && typeof name === "string") (byAddr.get(addr) ?? byAddr.set(addr, []).get(addr)!).push(name)
+    }
+    if (byAddr.size) {
+      lines.push("")
+      lines.push("ENS names found in the batch:")
+      lines.push([...byAddr].map(([a, names]) => `${names.join(", ")} → ${shortAddr(a)}`).join(", "))
+    }
   }
-  return lines.join("\n")
+  // `others` as a plain string ("None found with ENS names") carries nothing
+  // to render — the per-address "no ENS name" lines above already say that.
+  return lines.length ? lines.join("\n") : null
 }
 
 function reshape(s: string): string {

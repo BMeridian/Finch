@@ -10,12 +10,14 @@
 #
 # To settle, pay from a grant off the Bazantic hosted balance:
 #   baz grant create --name finch --cap 0.10
-#   BAZ_ACCOUNT=finch ./bazDemo.sh all NVDA
+#   BAZ_ACCOUNT=finch2 ./bazDemo.sh all NVDA
 #
 #   ./bazDemo.sh                     # full run (token defaults to NVDA)
 #   ./bazDemo.sh wallet              # wallet-provenance call (default fixture)
 #   ./bazDemo.sh 0x2a58fb44… NVDA    # provenance for that wallet + token
 #   ./bazDemo.sh wallet 0x2a58fb44… SPY   # same, explicit form
+#   ./bazDemo.sh trace 0x2a58fb44… NVDA      # /trace equivalent — confirmed route only
+#   ./bazDemo.sh traceens 0x2a58fb44… NVDA   # /traceENS equivalent — route + ENS names
 #   ./bazDemo.sh launches TSLA       # recent Pons launches paired vs TSLA
 #   ./bazDemo.sh grads TSLA          # graduated Pons tokens paired vs TSLA
 #   ./bazDemo.sh all GME             # full run, filtered by GME
@@ -44,6 +46,14 @@ if [[ "$STEP" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
 fi
 # `./bazDemo.sh wallet 0x… [SYM]`  — explicit form.
 if [ "$STEP" = wallet ] && [[ "${2:-}" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+  WALLET="$2"; TOK="${3:-NVDA}"
+fi
+# `./bazDemo.sh trace 0x… [SYM]`  — /trace equivalent (confirmed route only).
+if [ "$STEP" = trace ] && [[ "${2:-}" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+  WALLET="$2"; TOK="${3:-NVDA}"
+fi
+# `./bazDemo.sh traceens 0x… [SYM]`  — /traceENS equivalent (route + ENS names).
+if [ "$STEP" = traceens ] && [[ "${2:-}" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
   WALLET="$2"; TOK="${3:-NVDA}"
 fi
 
@@ -112,6 +122,8 @@ except Exception: print("")' 2>/dev/null)"
 
 case "$STEP" in
   wallet)   call "$ENDPOINT/query?wallet=$WALLET&q=why+did+I+get+$TOK" "3. PAID CALL — wallet provenance ($TOK)" ;;
+  trace)    call "$ENDPOINT/query?wallet=$WALLET&q=trace+$TOK&format=prose" "3. PAID CALL — /trace equivalent ($TOK)" ;;
+  traceens) call "$ENDPOINT/query?wallet=$WALLET&q=trace+$TOK+and+resolve+the+addresses+to+ENS+names&format=prose" "3. PAID CALL — /traceENS equivalent ($TOK)" ;;
   launches) call "$ENDPOINT/query?q=what+launched+on+pons+recently+$TOK&format=prose" "3. PAID CALL — recent Pons launches vs $TOK" ;;
   grads)    call "$ENDPOINT/query?q=graduated+pons+tokens+$TOK&format=prose" "3. PAID CALL — graduated (Uniswap V4) vs $TOK" ;;
   all)
@@ -121,7 +133,7 @@ case "$STEP" in
     pause
     call "$ENDPOINT/query?q=graduated+pons+tokens+$TOK&format=prose" "3c. PAID CALL — graduated vs $TOK"
     ;;
-  *) echo "unknown step: $STEP (use: wallet | launches | grads | all) [token]"; exit 1 ;;
+  *) echo "unknown step: $STEP (use: wallet | trace | traceens | launches | grads | all) [token]"; exit 1 ;;
 esac
 
 # --- 4. optional: the auto-generated MCP endpoint (no Finch MCP code on this path) ---

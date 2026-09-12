@@ -58,7 +58,7 @@ fixture `0x2a58fb44…ed3` is out of the sink's block window.
 - Settlement verified end to end: `baz grant create --name finch` off the
   Bazantic hosted balance, then `baz curl` → real $0.00001 USDC transfer on Base
   (e.g. tx `0x58ccefd2…`). `bazDemo.sh` runs the whole flow
-  (`BAZ_ACCOUNT=finch ./bazDemo.sh`).
+  (`BAZ_ACCOUNT=finch2 ./bazDemo.sh`).
 - **Finch verifies its own settlement** — Bazantic doesn't forward payment
   details upstream, so `bot/src/x402.ts` reads the tx off Base
   (`verifyPayment`, `settlementsSince`, `latestSettlement`), exposed as
@@ -106,7 +106,7 @@ ssh -i "$KEY" "$BOX" 'sudo systemctl restart finch-bot finch-api'
 # box is openSUSE Leap 16.0 (zypper, not dnf); Postgres is off-box (Aiven)
 
 # x402 demo
-BAZ_ACCOUNT=finch ./bazDemo.sh
+BAZ_ACCOUNT=finch2 ./bazDemo.sh
 
 # standalone chained-MCP demo (no Bazantic)
 node recipes/ens-enrich.mjs   # wallet 0x36de68e8… → daio.eth

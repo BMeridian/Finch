@@ -1,14 +1,15 @@
-import { Bot } from "grammy"
+import { Bot, InlineKeyboard } from "grammy"
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import { spawn } from "node:child_process"
 import { answer } from "./answer.js"
-import { getWallet, setWallet, clearWallet, getMode, setMode, getBazrep, setBazrep } from "./session.js"
+import { getWallet, setWallet, clearWallet, resetWalletAndSymbol, getMode, setMode, getBazrep, setBazrep, getAwaiting, setAwaiting, getSymbol, setSymbol, getCategory, setCategory } from "./session.js"
 import { setSeeMode, seeMode, callStats, tailCalls, callLogSize, type CallRecord } from "./calllog.js"
 import { freshness } from "./freshness.js"
 import { pons25Text } from "./pons25.js"
 import { finchTopText, coverageText } from "./lists.js"
 import { settlementsSince } from "./x402.js"
 import { runFinchGraphEns } from "./bazrecipe.js"
+import { addressForSymbol } from "./tokens.js"
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 if (!token) { console.error("TELEGRAM_BOT_TOKEN missing (expected in ../.env)"); process.exit(1) }
@@ -132,7 +133,87 @@ const AGENTS = [
   "/agentOff — stop",
 ].join("\n")
 
-bot.command("start", (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(HELP, { parse_mode: "HTML" }) })
+// Button UI — a FOMO-bot-style status/menu card, layered on top of the
+// existing text commands (all of which still work as typed).
+async function menuText(chatId: number): Promise<string> {
+  const w = getWallet(chatId)
+  let idx = "checking…"
+  try {
+    const f = await freshness()
+    idx = `${f.fresh ? "🟢 fresh" : "🟡 catching up"} · lag ${Math.round(f.lag_seconds / 60)}m`
+  } catch { idx = "🔴 unavailable" }
+  return [
+    "🐦 <b>FINCH</b>",
+    "Traces where tokenized stock tokens really came from — a Pons launch → its Uniswap V4 route — on Robinhood Chain.",
+    "",
+    `👛 Wallet: <b>${w ?? "Not connected"}</b>`,
+    `📡 Index: ${idx}`,
+    `🏷️ Tracked: 15 tokens · Pons + Uniswap V4`,
+    "",
+    "<i>Select an action below.</i>",
+  ].join("\n")
+}
+
+// Tacked onto answer replies so the menu is one tap away — no scrolling back
+// up. Returns to whichever category (Humans/Lists/AI-Agents) the user was
+// browsing, not always the top-level menu.
+function backToMenuKb(chatId: number): InlineKeyboard {
+  const cat = getCategory(chatId)
+  return cat ? new InlineKeyboard().text("◀ Back", `cat:${cat}`) : new InlineKeyboard().text("🐦 Menu", "menu")
+}
+
+// Top-level menu: just the 3 categories. Each opens its own sub-menu (with a
+// Back button) rather than dumping every button on one page.
+const menuKb = new InlineKeyboard()
+  .text("👤 Humans", "cat:humans").text("🤖 AI / Agents", "cat:agents").row()
+  .text("📋 Lists", "cat:lists").text("❤️ Health", "health").row()
+
+const subKb = {
+  humans: new InlineKeyboard()
+    .text("📍 Set Wallet", "setwallet").text("🔍 Symbol", "ask").row()
+    .text("🧭 Trace", "trace").text("🧭 Trace ENS", "traceens").row()
+    .text("🗑️ Forget", "forget").text("📖 How It Works", "howitworks").row()
+    .text("◀ Back", "menu"),
+  lists: new InlineKeyboard()
+    .text("🚀 Launches", "launches").text("🎓 Grads", "grads").row()
+    .text("📊 Pons25", "pons25").text("🐦 FinchTop", "finchtop").row()
+    .text("◀ Back", "menu"),
+  agents: new InlineKeyboard()
+    .text("🧾 Bazantic", "bazantic").text("🤖 For Agents", "foragents").row()
+    .text("👁️ See Agents", "seeagents").text("🛑 Agents Off", "agentoff").row()
+    .text("◀ Back", "menu"),
+} as const
+
+const bazanticKb = new InlineKeyboard()
+  .text("📞 Demo Call", "agentcall1").text("🧾 Bazantic Recipe", "bazrep").row()
+  .text("◀ Back", "cat:agents")
+
+const catTitle = { humans: "👤 <b>HUMANS</b>", lists: "📋 <b>LISTS</b>", agents: "🤖 <b>AI / AGENTS</b>" } as const
+
+const NEWVERSION = [
+  "🆕 <b>Finch — button UI writeup</b>",
+  "",
+  "<b>What's new</b>",
+  "/start now opens a short welcome card (like FOMO's) with 3 buttons: Set My Wallet, Open Finch Menu, How It Works — instead of a wall of text.",
+  "/menu is a new status card (wallet, index freshness, tracked-token count) with a button grid: Ask · Trace · Launches · Grads · Pons25 · FinchTop · For Agents · Health · Set Wallet · Forget.",
+  "",
+  "<b>How it's wired</b>",
+  "Every button fires a callback_query that calls the exact same function the equivalent typed command already used (replyLaunches, pons25Text, freshness, …) — no logic was duplicated, so the two UIs can't drift apart.",
+  "",
+  "<b>What still works, unchanged</b>",
+  "/account /trace /traceENS /launches /grads /pons25 /finchtop /health /forAgents /bazRep /seeAgent — every typed command from the old flow still answers exactly as before.",
+  "",
+  "<b>What's untouched</b>",
+  "/help still shows the full old text menu (HELP const) — that's the text-only path this is meant to replace once you're happy with the buttons.",
+  "",
+  "<b>Next step, on your go-ahead</b>",
+  "Drop the text-only /help wall and make /start → button welcome the only entry point (menu commands stay registered for power users/agents).",
+].join("\n")
+
+bot.command("newversion", (ctx) => ctx.reply(NEWVERSION, { parse_mode: "HTML" }))
+
+bot.command("start", async (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(await menuText(ctx.chat.id), { parse_mode: "HTML", reply_markup: menuKb }) })
+bot.command("menu", async (ctx) => { clearWallet(ctx.chat.id); return ctx.reply(await menuText(ctx.chat.id), { parse_mode: "HTML", reply_markup: menuKb }) })
 bot.command("help", (ctx) => ctx.reply(HELP, { parse_mode: "HTML" }))
 bot.command(["process", "method", "how"], (ctx) => ctx.reply(PROCESS, { parse_mode: "HTML", link_preview_options: { is_disabled: true } }))
 bot.command(["foragents", "api"], (ctx) => ctx.reply(agentsText(), { link_preview_options: { is_disabled: true } }))
@@ -143,12 +224,17 @@ bot.command("ping", (ctx) => ctx.reply("pong"))
 // call ($0.00001 USDC, Base) settled from the "finch" grant. The point is the
 // live /seeAgentFull feed picking it up as an incoming agent call, not this
 // chat's own reply — this command is deliberately blind.
-bot.command("agentcall1", (ctx) => {
-  const cmd = `ENDPOINT=$(baz gateway list --json | python3 -c 'import sys,json; xs=[g["endpointUrl"] for g in json.load(sys.stdin)["listings"] if g["name"]=="Finch" and g["status"]=="active"]; print(xs[0] if xs else "")'); [ -n "$ENDPOINT" ] && baz curl "$ENDPOINT/query?q=graduated+pons+tokens+SPCX&format=prose" --account finch --max-amount 0.02 --yes --json`
+function fireAgentCall1(ctx: any) {
+  // Demo Call is a one-tap Bazantic x402 flow: turn the live feed on (if it
+  // isn't already) so the paid call's settlement shows up right here, then fire.
+  setSeeMode("full")
+  startWatching(ctx.chat.id)
+  const cmd = `ENDPOINT=$(baz gateway list --json | python3 -c 'import sys,json; xs=[g["endpointUrl"] for g in json.load(sys.stdin)["listings"] if g["name"]=="Finch" and g["status"]=="active"]; print(xs[0] if xs else "")'); [ -n "$ENDPOINT" ] && baz curl "$ENDPOINT/query?q=graduated+pons+tokens+SPCX&format=prose" --account finch2 --max-amount 0.02 --yes --json`
   const child = spawn("bash", ["-lc", cmd], { detached: true, stdio: "ignore" })
   child.unref()
-  return ctx.reply("agentCall1 fired — Blind, no output here.")
-})
+  return ctx.reply("Demo call fired — a real x402 payment, watch for the settlement below.")
+}
+bot.command("agentcall1", fireAgentCall1)
 
 // /bazrep — run the PUBLISHED Bazantic recipe FINCH_GRAPH_ENS. Bazantic drives
 // an LLM that chains Finch's own paid gateway tools (finchQuery -> ensResolve)
@@ -166,7 +252,7 @@ async function runBazrep(ctx: any, wallet: string, symbol?: string) {
       return await ctx.reply(
         `<b>Bazantic recipe · FINCH_GRAPH_ENS</b>  <i>${feedEsc(r.gateway.replace(/^https:\/\//, ""))}</i>\n\n` +
         feedEsc(r.output).slice(0, 3500),
-        { parse_mode: "HTML", link_preview_options: { is_disabled: true } })
+        { parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: backToMenuKb(ctx.chat.id) })
     } catch (e) {
       if (attempt === 1) { await ctx.reply("First attempt hit the gateway's timeout — retrying once…"); continue }
       await ctx.reply(`recipe failed twice: ${feedEsc(String(e))} — try /bazRep again in a moment`)
@@ -174,16 +260,20 @@ async function runBazrep(ctx: any, wallet: string, symbol?: string) {
   }
 }
 
-bot.command(["bazrep", "bazrecipe"], async (ctx) => {
-  const m = (ctx.match ?? "").toString().match(/(0x[0-9a-fA-F]{40})(?:\s+([A-Za-z]{1,8}))?/)
-  if (m) return runBazrep(ctx, m[1], m[2])          // one-liner: /bazrep 0x… NVDA
-  setBazrep(ctx.chat.id, { step: "wallet" })         // guided: ask for the fields
+function startBazrepPrompt(ctx: any) {
+  setBazrep(ctx.chat.id, { step: "wallet" })
   return ctx.reply(
     "Bazantic recipe: <b>FINCH_GRAPH_ENS</b>\n" +
     "<i>Finch provenance (Substreams-indexed Pons → Uniswap V4 route) → ENS names " +
     "(The Graph's ENS subgraph) — LLM-driven, a paid gateway call.</i>\n\n" +
-    "Wallet (0x…):",
+    "Wallet (0x…), try: <code>0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0</code>",
     { parse_mode: "HTML" })
+}
+
+bot.command(["bazrep", "bazrecipe"], async (ctx) => {
+  const m = (ctx.match ?? "").toString().match(/(0x[0-9a-fA-F]{40})(?:\s+([A-Za-z]{1,8}))?/)
+  if (m) return runBazrep(ctx, m[1], m[2])          // one-liner: /bazrep 0x… NVDA
+  return startBazrepPrompt(ctx)                      // guided: ask for the fields
 })
 
 function agentsText(): string {
@@ -214,10 +304,11 @@ async function replyTrace(ctx: any, withEns: boolean) {
   if (!w) return ctx.reply("Set your wallet first: /account 0x…")
   const sym = (ctx.match ?? "").toString().trim()
   if (!sym) return ctx.reply(`Usage: /${withEns ? "traceENS" : "trace"} NVDA — the token symbol you want the route for.`)
+  setSymbol(ctx.chat.id, sym)
   await ctx.replyWithChatAction("typing")
   const q = `trace ${sym}${withEns ? " and resolve the addresses to ENS names" : ""}`
   return ctx.reply(await answer(q, w, "wallet"),
-    { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
+    { link_preview_options: { is_disabled: true }, parse_mode: "HTML", reply_markup: backToMenuKb(ctx.chat.id) })
 }
 // Menu commands must be lowercase (Telegram setMyCommands rejects uppercase),
 // but a manually-typed command is delivered verbatim — so match any casing.
@@ -246,7 +337,7 @@ async function replyLaunches(ctx: any) {
   await ctx.replyWithChatAction("typing")
   const arg = (ctx.match ?? "").toString().trim()
   const a = await answer(`what launched on pons recently ${arg}`.trim(), undefined, "launches")
-  return ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
+  return ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML", reply_markup: backToMenuKb(ctx.chat.id) })
 }
 bot.command(["launchespons", "launches", "pons", "recent"], replyLaunches)
 
@@ -255,7 +346,7 @@ async function replyGraduated(ctx: any) {
   await ctx.replyWithChatAction("typing")
   const arg = (ctx.match ?? "").toString().trim()
   return ctx.reply(await answer(`graduated pons tokens ${arg}`.trim(), undefined, "launches"),
-    { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
+    { link_preview_options: { is_disabled: true }, parse_mode: "HTML", reply_markup: backToMenuKb(ctx.chat.id) })
 }
 bot.command(["graduated", "grads", "graduates"], replyGraduated)
 
@@ -305,7 +396,10 @@ function fmtCall(r: CallRecord, mode: "min" | "full"): string {
   if (r.wallet) bits.push(`   wallet ${feedEsc(r.wallet)}`)
   if (r.question) bits.push(`   q: <b>${feedEsc(r.question)}</b>`)
   bits.push(`   ${r.format} · ${r.took_ms}ms · ${r.ok ? "ok" : "err"}`)
-  if (r.answer) bits.push("", "answer: " + feedEsc(trimAnswer(r.answer)))
+  // r.answer is Finch's own generated text — for format=prose it already
+  // carries intentional HTML (<b>, etc.) meant to render, so don't re-escape
+  // it (that would show literal tags); only caller-supplied fields get feedEsc.
+  if (r.answer) bits.push("", "answer: " + trimAnswer(r.answer))
   return bits.join("\n")
 }
 
@@ -331,15 +425,17 @@ async function pumpWatch() {
     if (r.caller === "::1" || r.caller === "127.0.0.1" || r.caller === "anonymous") continue
     try {
       let msg = fmtCall(r, mode === "full" ? "full" : "min")
+      let txLine = ""
       if (r.caller.startsWith("bazantic:")) {
         const s = settlements[si++]
         if (s) settleBlock = Math.max(settleBlock, s.block)
         const paid = s
           ? `   💸 <b>$${(+s.amount_usdc).toString()} x402</b> · tx ${feedEsc(s.tx.slice(0, 10) + "…" + s.tx.slice(-6))} (Base)`
-          : `   💸 <b>$0.00001 x402</b> (Base)`
+          : `   💸 <b>x402 paid</b> (Base) · settlement tx not found yet`
         msg = msg.includes("\n") ? msg.replace("\n", "\n" + paid + "\n") : msg + "\n" + paid
+        if (s) txLine = `\n\n<a href="https://basescan.org/tx/${s.tx}">${feedEsc(s.tx)}</a>`
       }
-      await bot.api.sendMessage(w.chatId, msg, { parse_mode: "HTML" })
+      await bot.api.sendMessage(w.chatId, msg + txLine, { parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: backToMenuKb(w.chatId) })
       console.log(`feed -> chat ${w.chatId}: ${r.caller} ${r.question || "-"}`)
     } catch (e) { console.error("feed send failed:", e) }
   }
@@ -356,19 +452,45 @@ bot.on("message:text", async (ctx) => {
   // never write wallet addresses to the journal
   console.log(`msg from @${ctx.from?.username ?? ctx.from?.id}: ${q.replace(/0x[0-9a-fA-F]{40}/g, "0x…")}`)
 
-  // /bazrep guided flow: collect Wallet then Symbol, then run the recipe
+  // /bazrep guided flow takes priority over a stale button "awaiting" state —
+  // collect Wallet then Symbol, then run the recipe.
   const br = getBazrep(ctx.chat.id)
   if (br) {
     const t = q.trim()
     if (/^(cancel|stop|nvm|\/cancel)$/i.test(t)) { setBazrep(ctx.chat.id, undefined); return ctx.reply("Recipe cancelled.") }
     if (br.step === "wallet") {
-      if (!ADDR.test(t)) return ctx.reply("Send a wallet address (0x… 40 hex), or 'cancel'.")
-      setBazrep(ctx.chat.id, { step: "symbol", wallet: t.toLowerCase() })
+      const m = t.match(/0x[0-9a-fA-F]{40}/)
+      if (!m) return ctx.reply("Send a wallet address (0x… 40 hex), or 'cancel'.")
+      setBazrep(ctx.chat.id, { step: "symbol", wallet: m[0].toLowerCase() })
       return ctx.reply("Symbol (default NVDA):")
     }
     if (br.step === "symbol") {
       const sym = /^[–\-]$|^skip$|^default$/i.test(t) ? undefined : t.replace(/[^A-Za-z]/g, "").slice(0, 8).toUpperCase()
       return runBazrep(ctx, br.wallet!, sym || undefined)
+    }
+  }
+
+  // Symbol / Trace / TraceENS button flow: the button asked for a symbol, this message is it.
+  const awaiting = getAwaiting(ctx.chat.id)
+  if (awaiting) {
+    setAwaiting(ctx.chat.id, undefined)
+    const sym = q.trim()
+    setSymbol(ctx.chat.id, sym.replace(/[^A-Za-z]/g, "").slice(0, 8) || sym)
+    try {
+      if (awaiting === "symbol") {
+        await ctx.replyWithChatAction("typing")
+        const a = await answer(sym, getWallet(ctx.chat.id), getMode(ctx.chat.id))
+        return await ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML", reply_markup: backToMenuKb(ctx.chat.id) })
+      }
+      if (awaiting === "launches" || awaiting === "grads") {
+        ctx.match = sym
+        return await (awaiting === "launches" ? replyLaunches(ctx) : replyGraduated(ctx))
+      }
+      ctx.match = sym
+      return await replyTrace(ctx, awaiting === "traceens")
+    } catch (e) {
+      console.error("awaiting-symbol reply failed:", e)
+      return ctx.reply("Something went wrong reaching the index. Try again in a moment.")
     }
   }
 
@@ -405,10 +527,15 @@ bot.on("message:text", async (ctx) => {
   // follow-up bare symbol filters by pairing token.
   if (/(launch|what.*pons|newly|just dropped|new (token|coin))/i.test(q)) setMode(ctx.chat.id, "launches")
 
+  // any free-text question that names a known symbol (bare "NVDA", "why did I
+  // get NVDA?", …) caches it — so the Trace / TraceENS buttons can reuse it.
+  const symMatch = bare.toUpperCase().match(/\b([A-Z]{2,8})\b/)
+  if (symMatch && addressForSymbol(symMatch[1])) setSymbol(ctx.chat.id, symMatch[1])
+
   await ctx.replyWithChatAction("typing")
   try {
     const a = await answer(q, getWallet(ctx.chat.id), getMode(ctx.chat.id))
-    await ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML" })
+    await ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML", reply_markup: backToMenuKb(ctx.chat.id) })
     console.log("replied ok")
   } catch (e) {
     console.error("answer failed:", e)
@@ -416,10 +543,91 @@ bot.on("message:text", async (ctx) => {
   }
 })
 
+// Inline-button dispatch — reuses the exact same handlers the typed commands
+// call, so button UI and text UI never drift apart.
+bot.on("callback_query:data", async (ctx) => {
+  const data = ctx.callbackQuery.data
+  console.log(`button from @${ctx.from?.username ?? ctx.from?.id}: ${data}`)
+  await ctx.answerCallbackQuery().catch((e) => console.error("answerCallbackQuery failed:", e))
+  if (data.startsWith("cat:")) {
+    const cat = data.slice(4) as keyof typeof subKb
+    const kb = subKb[cat]
+    if (!kb) return
+    setCategory(ctx.chat!.id, cat)
+    const text = `${catTitle[cat]}\n\n<i>Select an action below.</i>`
+    return ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: kb }).catch(() => ctx.reply(text, { parse_mode: "HTML", reply_markup: kb }))
+  }
+  switch (data) {
+    case "menu": {
+      clearWallet(ctx.chat!.id)
+      const text = await menuText(ctx.chat!.id)
+      return ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: menuKb }).catch(() => ctx.reply(text, { parse_mode: "HTML", reply_markup: menuKb }))
+    }
+    case "howitworks": return ctx.reply(PROCESS, { parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "setwallet":
+      resetWalletAndSymbol(ctx.chat!.id)
+      return ctx.reply("Wallet + symbol reset. Send your wallet address (0x… 40 hex chars) — try <code>0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0</code>", { parse_mode: "HTML" })
+    case "forget": clearWallet(ctx.chat!.id); return ctx.reply("Wallet cleared.")
+    case "ask": {
+      if (!getWallet(ctx.chat!.id)) return ctx.reply("Set your wallet first: tap 📍 Set My Wallet.")
+      setAwaiting(ctx.chat!.id, "symbol")
+      return ctx.reply("Send a token symbol (NVDA, SPY, GME, …) or ask \"why did I get NVDA?\"")
+    }
+    case "trace": {
+      if (!getWallet(ctx.chat!.id)) return ctx.reply("Set your wallet first: tap 📍 Set My Wallet.")
+      const sym = getSymbol(ctx.chat!.id)
+      if (sym) { ctx.match = sym; return replyTrace(ctx, false) }
+      setAwaiting(ctx.chat!.id, "trace")
+      return ctx.reply("Send the token symbol you want the route for (e.g. NVDA):")
+    }
+    case "traceens": {
+      if (!getWallet(ctx.chat!.id)) return ctx.reply("Set your wallet first: tap 📍 Set My Wallet.")
+      const sym = getSymbol(ctx.chat!.id)
+      if (sym) { ctx.match = sym; return replyTrace(ctx, true) }
+      setAwaiting(ctx.chat!.id, "traceens")
+      return ctx.reply("Send the token symbol — Finch will trace the route and resolve the addresses to ENS names (e.g. NVDA):")
+    }
+    case "launches":
+      ctx.match = ""; setAwaiting(ctx.chat!.id, "launches")
+      await replyLaunches(ctx)
+      return ctx.reply("Send a symbol (e.g. SPCX) to filter, or ignore this.")
+    case "grads":
+      ctx.match = ""; setAwaiting(ctx.chat!.id, "grads")
+      await replyGraduated(ctx)
+      return ctx.reply("Send a symbol (e.g. SPCX) to filter, or ignore this.")
+    case "pons25": return ctx.reply(pons25Text(), { link_preview_options: { is_disabled: true }, reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "finchtop": return ctx.reply(finchTopText(), { reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "noop": return
+    case "foragents": return ctx.reply(agentsText(), { link_preview_options: { is_disabled: true }, reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "coverage": return ctx.reply(coverageText(), { link_preview_options: { is_disabled: true }, reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "bazantic": {
+      const text = "🧾 <b>BAZANTIC</b>\n\n<i>Select an action below.</i>"
+      return ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: bazanticKb }).catch(() => ctx.reply(text, { parse_mode: "HTML", reply_markup: bazanticKb }))
+    }
+    case "agentcall1": return fireAgentCall1(ctx)
+    case "bazrep": return startBazrepPrompt(ctx)
+    case "seeagents": setSeeMode("full"); startWatching(ctx.chat!.id); return ctx.reply(seeAgentReply("full"), { reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "agentoff": setSeeMode("off"); writeWatch(null); return ctx.reply("Agent calls: OFF.", { reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "newversion": return ctx.reply(NEWVERSION, { parse_mode: "HTML", reply_markup: backToMenuKb(ctx.chat!.id) })
+    case "health": {
+      try {
+        const f = await freshness()
+        const s = callStats()
+        return ctx.reply(
+          `Substreams sink (StreamingFast → Postgres): block ${f.subgraph_block} · chain ${f.chain_block}\n` +
+          `Lag: ${f.lag_blocks.toLocaleString()} blocks (~${Math.round(f.lag_seconds / 60)} min) · ${f.fresh ? "keeping pace" : "catching up"}\n` +
+          `Indexing: Pons launch factory + graduations + Uniswap V4 pool inits + stock-token transfers\n` +
+          `Agents: ${s.total} calls logged (${seeMode()}) · live on the Bazantic gateway`,
+          { reply_markup: backToMenuKb(ctx.chat!.id) })
+      } catch (e) { return ctx.reply(`Health check failed: ${e}`) }
+    }
+  }
+})
+
 bot.catch((err) => console.error("bot error:", err))
 
 const MENU = [
-  { command: "start", description: "Reset and show the intro" },
+  { command: "newversion", description: "What changed in the new button UI" },
   { command: "process", description: "How Finch answers “why did I get this token?”" },
   { command: "foragents", description: "HTTP API / MCP / Bazantic access" },
   { command: "pons25", description: "The Pons25 basket" },

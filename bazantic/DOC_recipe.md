@@ -41,7 +41,7 @@ real param to see the 402.
 ```bash
 baz grant create --name finch --cap 0.10      # authorize this device off the
                                               # Bazantic hosted balance (browser approve)
-baz curl "$GW/query?wallet=0x2408ce75…&format=prose" --account finch --yes --json
+baz curl "$GW/query?wallet=0x2408ce75…&format=prose" --account finch2 --yes --json
 ```
 →
 ```json
@@ -54,7 +54,7 @@ baz curl "$GW/query?wallet=0x2408ce75…&format=prose" --account finch --yes --j
 
 A real $0.00001 USDC transfer on Base, on-chain, from the hosted balance. Finch
 logs it at `/calls` as `bazantic:<id>` and streams it to Telegram under
-`/seeAgent`. `bazDemo.sh` runs the whole flow — `BAZ_ACCOUNT=finch ./bazDemo.sh`.
+`/seeAgent`. `bazDemo.sh` runs the whole flow — `BAZ_ACCOUNT=finch2 ./bazDemo.sh`.
 
 **Finch verifies its own settlement.** Bazantic doesn't forward payment details
 upstream, so Finch reads the tx off Base directly:

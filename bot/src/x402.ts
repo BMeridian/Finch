@@ -42,9 +42,10 @@ export interface Settlement { amount_usdc: string; tx: string; block: number; lo
 // each get their own tx rather than all sharing the latest.
 export async function settlementsSince(afterBlock: number): Promise<Settlement[]> {
   const head = parseInt(await rpc("eth_blockNumber", []), 16)
-  // afterBlock 0 = cold start: only look at the last ~30s so we don't hand out
-  // stale settlements. Otherwise scan from the cursor, capped at ~20 min.
-  const from = afterBlock > 0 ? Math.max(afterBlock + 1, head - 600) : head - 15
+  // afterBlock 0 = cold start (e.g. Demo Call just turned watching on): look
+  // back ~5 min so a payment that just settled isn't missed. Otherwise scan
+  // from the cursor, capped at ~20 min.
+  const from = afterBlock > 0 ? Math.max(afterBlock + 1, head - 600) : head - 150
   const logs = await rpc("eth_getLogs", [{
     fromBlock: "0x" + Math.max(0, from).toString(16),
     toBlock: "latest",
