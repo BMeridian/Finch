@@ -5,9 +5,10 @@
 Robinhood Chain is growing fast. Pons, its dominant launchpad, is growing
 fast. Tokenized stocks on top of both are growing fast. None of that growth
 comes with visibility into where a wallet's tokens actually came from — a
-gap that gets wider, not smaller, as activity scales up. Finch is a finch to
-Robinhood('s)hood: a small bird that watches the chain and reports back what
-it sees.
+gap that gets wider, not smaller, as activity scales up. The explosive growth
+of Robinhood Chain, Pons, and interest in tokenized stocks together is what
+led to building this tool. Finch is a finch to Robinhood('s)hood: a small
+bird that watches the chain and reports back what it sees.
 
 ### The problem
 

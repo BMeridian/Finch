@@ -143,8 +143,9 @@ async function menuText(chatId: number): Promise<string> {
     idx = `${f.fresh ? "🟢 fresh" : "🟡 catching up"} · lag ${Math.round(f.lag_seconds / 60)}m`
   } catch { idx = "🔴 unavailable" }
   return [
-    "🐦 <b>FINCH | Token Provenance on RH</b>",
-    "Using Substreams (The Graph), we trace where tokenized stock tokens on Robinhood Chain came from — a Pons launch → its Uniswap V4 route → wallet.",
+    "🐦 <b>FINCH | Tracking Tokens on RH</b>",
+    "Using Substreams (The Graph), we trace the path of airdropped stock tokens on the Robinhood Chain — a Pons launch → its Uniswap V4 route → wallet.",
+    "The explosive growth of Robinhood Chain, Pons launchpad, and tokenized stocks is why we built this.",
     "",
     `👛 Wallet: <b>${w ?? "Not connected"}</b>`,
     `📡 Index: ${idx} · Substreams (The Graph)`,
@@ -198,7 +199,7 @@ const subKb = {
     .text("🏠 Home", "menu"),
   agents: new InlineKeyboard()
     .text("🧾 Bazantic", "bazantic").text("🤖 For Agents", "foragents").row()
-    .text("👁️ See Agents", "seeagents").text("🛑 Agents Off", "agentoff").row()
+    .text("👁️ See Agent Calls", "seeagents").text("🛑 Stop Agent Calls", "agentoff").row()
     .text("🏠 Home", "menu"),
 } as const
 
@@ -213,6 +214,7 @@ const catTitle = { humans: "👤 <b>HUMANS</b>", lists: "📋 <b>LISTS</b>", age
 const catBrief = {
   humans: "This is where a human asks Finch a question. Under the hood, Finch is reverse-engineering Uniswap V4 — one shared contract holds every pool, and Pons attaches its own custom hook to redirect fee-cut airdrops into the pools it cares about. That's the path Finch traces back to the actual token.",
   agents: "This is where an agent calls Finch directly — no human in the loop. It pays per call through Bazantic's x402 gateway on Base, or reaches Finch for free over MCP. Finch checks its own settlement on-chain rather than trusting the gateway's word for it, and every response carries a fixed confidence label — an agent gets the same route-tracing Finch does for a human, not a dumbed-down summary.",
+  lists: "This is Pons launchpad's own activity, not a specific wallet. Launches are new tokens still on the bonding curve — no Uniswap V4 pool yet. Grads are tokens that graduated: Pons deployed their pool on Uniswap V4's PoolManager behind its Meme Hook.",
 } as const
 
 const NEWVERSION = [
@@ -289,7 +291,7 @@ function startBazrepPrompt(ctx: any) {
   setBazrep(ctx.chat.id, { step: "wallet" })
   return ctx.reply(
     "Bazantic recipe: <b>FINCH_GRAPH_ENS</b>\n" +
-    "<i>Finch provenance (Substreams-indexed Pons → Uniswap V4 route) → ENS names " +
+    "<i>Finch tracking (Substreams-indexed Pons → Uniswap V4 route) → ENS names " +
     "(The Graph's ENS subgraph) — LLM-driven, a paid gateway call.</i>\n\n" +
     "Wallet (0x…), try: <code>0x2408ce75d217e3a70d6ca370c78c1b34d706f5a0</code>",
     { parse_mode: "HTML" })

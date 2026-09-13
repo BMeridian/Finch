@@ -151,7 +151,7 @@ async function formatWallet(p: Parsed, q: Extract<QueryResult, { kind: "wallet" 
     if (!p.wantsTrace) {
       if (onPath && c) {
         const kind = c.managerRegistered
-          ? `the Pons holder-fee distributor for ${esc(c.symbol)}`
+          ? `the <b>Pons holder-fee distributor</b> for ${esc(c.symbol)}`
           : `a per-token fee distributor (token()=${esc(c.symbol)})`
         return `This wallet received ${amt} ${symbol} from ${shortAddr(D)} <b>${ago(r.timestamp)}</b>, 1 of ${n} recipients in that tx.\n\n` +
           `${shortAddr(D)} is ${kind}. ${esc(c.symbol)}'s creator-fee cut is taken in ${symbol} ` +
