@@ -144,10 +144,10 @@ async function menuText(chatId: number): Promise<string> {
   } catch { idx = "🔴 unavailable" }
   return [
     "🐦 <b>FINCH | Token Provenance on RH</b>",
-    "Traces where tokenized stock tokens really came from — a Pons launch → its Uniswap V4 route — on Robinhood Chain.",
+    "Using Substreams (The Graph), we trace where tokenized stock tokens on Robinhood Chain came from — a Pons launch → its Uniswap V4 route → wallet.",
     "",
     `👛 Wallet: <b>${w ?? "Not connected"}</b>`,
-    `📡 Index: ${idx}`,
+    `📡 Index: ${idx} · Substreams (The Graph)`,
     `🏷️ Tracked: 15 tokens · Pons + Uniswap V4`,
     "",
     "<i>Select an action below.</i>",
@@ -159,7 +159,9 @@ async function menuText(chatId: number): Promise<string> {
 // browsing, not always the top-level menu.
 function backToMenuKb(chatId: number): InlineKeyboard {
   const cat = getCategory(chatId)
-  return cat ? new InlineKeyboard().text("◀ Back", `cat:${cat}`) : new InlineKeyboard().text("🐦 Menu", "menu")
+  return cat
+    ? new InlineKeyboard().text("◀ Back", `cat:${cat}`).text("🏠 Home", "menu")
+    : new InlineKeyboard().text("🏠 Home", "menu")
 }
 
 // Quick-tap symbol filters offered after Launches/Grads — same four hotkeys
@@ -188,23 +190,30 @@ const subKb = {
   humans: new InlineKeyboard()
     .text("📍 Set Wallet", "setwallet").text("🔍 Symbol", "ask").row()
     .text("🧭 Trace", "trace").text("🧭 Trace ENS", "traceens").row()
-    .text("🗑️ Forget", "forget").text("📖 How It Works", "howitworks").row()
-    .text("◀ Back", "menu"),
+    .text("🗑️ Forget Wallet", "forget").text("📖 How It Works", "howitworks").row()
+    .text("🏠 Home", "menu"),
   lists: new InlineKeyboard()
     .text("🚀 Launches", "launches").text("🎓 Grads", "grads").row()
     .text("📊 Pons25", "pons25").text("🐦 FinchTop", "finchtop").row()
-    .text("◀ Back", "menu"),
+    .text("🏠 Home", "menu"),
   agents: new InlineKeyboard()
     .text("🧾 Bazantic", "bazantic").text("🤖 For Agents", "foragents").row()
     .text("👁️ See Agents", "seeagents").text("🛑 Agents Off", "agentoff").row()
-    .text("◀ Back", "menu"),
+    .text("🏠 Home", "menu"),
 } as const
 
 const bazanticKb = new InlineKeyboard()
   .text("📞 Demo Call", "agentcall1").text("🧾 Bazantic Recipe", "bazrep").row()
-  .text("◀ Back", "cat:agents")
+  .text("◀ Back", "cat:agents").text("🏠 Home", "menu")
 
 const catTitle = { humans: "👤 <b>HUMANS</b>", lists: "📋 <b>LISTS</b>", agents: "🤖 <b>AI / AGENTS</b>" } as const
+
+// Shown once, right where a human starts asking Finch questions — sets up the
+// Uniswap V4 mechanism once so /trace and /traceENS don't need their own explainer.
+const catBrief = {
+  humans: "This is where a human asks Finch a question. Under the hood, Finch is reverse-engineering Uniswap V4 — one shared contract holds every pool, and Pons attaches its own custom hook to redirect fee-cut airdrops into the pools it cares about. That's the path Finch traces back to the actual token.",
+  agents: "This is where an agent calls Finch directly — no human in the loop. It pays per call through Bazantic's x402 gateway on Base, or reaches Finch for free over MCP. Finch checks its own settlement on-chain rather than trusting the gateway's word for it, and every response carries a fixed confidence label — an agent gets the same route-tracing Finch does for a human, not a dumbed-down summary.",
+} as const
 
 const NEWVERSION = [
   "🆕 <b>Finch — button UI writeup</b>",
@@ -592,7 +601,8 @@ bot.on("callback_query:data", async (ctx) => {
     const kb = subKb[cat]
     if (!kb) return
     setCategory(ctx.chat!.id, cat)
-    const text = `${catTitle[cat]}\n\n<i>Select an action below.</i>`
+    const brief = (catBrief as Record<string, string>)[cat]
+    const text = `${catTitle[cat]}\n\n${brief ? brief + "\n\n" : ""}<i>Select an action below.</i>`
     return ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: kb }).catch(() => ctx.reply(text, { parse_mode: "HTML", reply_markup: kb }))
   }
   switch (data) {
