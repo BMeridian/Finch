@@ -162,6 +162,22 @@ function backToMenuKb(chatId: number): InlineKeyboard {
   return cat ? new InlineKeyboard().text("◀ Back", `cat:${cat}`) : new InlineKeyboard().text("🐦 Menu", "menu")
 }
 
+// Quick-tap symbol filters offered after Launches/Grads — same four hotkeys
+// used on the /bazRep Symbol prompt, for consistency.
+function listFilterKb(mode: "launches" | "grads"): InlineKeyboard {
+  const kb = new InlineKeyboard()
+  for (const sym of ["NVDA", "SPY", "TSLA", "AMZN"]) kb.text(sym, `listfilter:${mode}:${sym}`)
+  return kb
+}
+
+// Same four quick-tap symbols, offered right after a wallet is set so the
+// "send a token symbol" prompt doesn't require typing.
+function symbolHotkeysKb(): InlineKeyboard {
+  const kb = new InlineKeyboard()
+  for (const sym of ["NVDA", "SPY", "TSLA", "AMZN"]) kb.text(sym, `asksym:${sym}`)
+  return kb
+}
+
 // Top-level menu: just the 3 categories. Each opens its own sub-menu (with a
 // Back button) rather than dumping every button on one page.
 const menuKb = new InlineKeyboard()
@@ -232,7 +248,7 @@ function fireAgentCall1(ctx: any) {
   const cmd = `ENDPOINT=$(baz gateway list --json | python3 -c 'import sys,json; xs=[g["endpointUrl"] for g in json.load(sys.stdin)["listings"] if g["name"]=="Finch" and g["status"]=="active"]; print(xs[0] if xs else "")'); [ -n "$ENDPOINT" ] && baz curl "$ENDPOINT/query?q=graduated+pons+tokens+SPCX&format=prose" --account finch2 --max-amount 0.02 --yes --json`
   const child = spawn("bash", ["-lc", cmd], { detached: true, stdio: "ignore" })
   child.unref()
-  return ctx.reply("Demo call fired — a real x402 payment, watch for the settlement below.")
+  return ctx.reply("Demo call fired — Agent is asking for graduated pons tokens SPCX. A real x402 payment settles below, with Base TX hash.")
 }
 bot.command("agentcall1", fireAgentCall1)
 
@@ -290,7 +306,7 @@ bot.command("account", (ctx) => {
   }
   if (!ADDR.test(arg)) return ctx.reply("That doesn't look like a wallet address. Use /account 0x… (40 hex chars).")
   setWallet(ctx.chat.id, arg)
-  return ctx.reply(`Wallet set to ${arg.toLowerCase()}.\nNow send a token symbol (NVDA, SPY, GME, …) or "why did I get NVDA?"`)
+  return ctx.reply(`Wallet set to ${arg.toLowerCase()}.\nNow send a token symbol (NVDA, SPY, GME, …) or "why did I get NVDA?"`, { reply_markup: symbolHotkeysKb() })
 })
 
 bot.command(["forget", "clear"], (ctx) => { clearWallet(ctx.chat.id); return ctx.reply("Wallet cleared.") })
@@ -462,7 +478,11 @@ bot.on("message:text", async (ctx) => {
       const m = t.match(/0x[0-9a-fA-F]{40}/)
       if (!m) return ctx.reply("Send a wallet address (0x… 40 hex), or 'cancel'.")
       setBazrep(ctx.chat.id, { step: "symbol", wallet: m[0].toLowerCase() })
-      return ctx.reply("Symbol (default NVDA):")
+      return ctx.reply("Symbol (default NVDA):", {
+        reply_markup: new InlineKeyboard()
+          .text("NVDA", "bazrepsym:NVDA").text("SPY", "bazrepsym:SPY")
+          .text("TSLA", "bazrepsym:TSLA").text("AMZN", "bazrepsym:AMZN"),
+      })
     }
     if (br.step === "symbol") {
       const sym = /^[–\-]$|^skip$|^default$/i.test(t) ? undefined : t.replace(/[^A-Za-z]/g, "").slice(0, 8).toUpperCase()
@@ -505,7 +525,7 @@ bot.on("message:text", async (ctx) => {
   const bare = q.trim()
   if (ADDR.test(bare)) {
     setWallet(ctx.chat.id, bare)
-    return ctx.reply(`Wallet set to ${bare.toLowerCase()}.\nNow send a token symbol (NVDA, SPY, GME, …) or "why did I get NVDA?"`)
+    return ctx.reply(`Wallet set to ${bare.toLowerCase()}.\nNow send a token symbol (NVDA, SPY, GME, …) or "why did I get NVDA?"`, { reply_markup: symbolHotkeysKb() })
   }
 
   if (/^\/?(process|method|methodology|how it works)$/i.test(bare)) return ctx.reply(PROCESS, { link_preview_options: { is_disabled: true } })
@@ -549,6 +569,24 @@ bot.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data
   console.log(`button from @${ctx.from?.username ?? ctx.from?.id}: ${data}`)
   await ctx.answerCallbackQuery().catch((e) => console.error("answerCallbackQuery failed:", e))
+  if (data.startsWith("bazrepsym:")) {
+    const br = getBazrep(ctx.chat!.id)
+    if (!br?.wallet) return
+    return runBazrep(ctx, br.wallet, data.slice("bazrepsym:".length))
+  }
+  if (data.startsWith("asksym:")) {
+    const sym = data.slice("asksym:".length)
+    setSymbol(ctx.chat!.id, sym)
+    await ctx.replyWithChatAction("typing")
+    const a = await answer(sym, getWallet(ctx.chat!.id), getMode(ctx.chat!.id))
+    return ctx.reply(a, { link_preview_options: { is_disabled: true }, parse_mode: "HTML", reply_markup: backToMenuKb(ctx.chat!.id) })
+  }
+  if (data.startsWith("listfilter:")) {
+    const [, mode, sym] = data.split(":")
+    setAwaiting(ctx.chat!.id, undefined)
+    ctx.match = sym
+    return mode === "grads" ? replyGraduated(ctx) : replyLaunches(ctx)
+  }
   if (data.startsWith("cat:")) {
     const cat = data.slice(4) as keyof typeof subKb
     const kb = subKb[cat]
@@ -590,11 +628,11 @@ bot.on("callback_query:data", async (ctx) => {
     case "launches":
       ctx.match = ""; setAwaiting(ctx.chat!.id, "launches")
       await replyLaunches(ctx)
-      return ctx.reply("Send a symbol (e.g. SPCX) to filter, or ignore this.")
+      return ctx.reply("Send a symbol (e.g. SPCX) to filter, or ignore this.", { reply_markup: listFilterKb("launches") })
     case "grads":
       ctx.match = ""; setAwaiting(ctx.chat!.id, "grads")
       await replyGraduated(ctx)
-      return ctx.reply("Send a symbol (e.g. SPCX) to filter, or ignore this.")
+      return ctx.reply("Send a symbol (e.g. SPCX) to filter, or ignore this.", { reply_markup: listFilterKb("grads") })
     case "pons25": return ctx.reply(pons25Text(), { link_preview_options: { is_disabled: true }, reply_markup: backToMenuKb(ctx.chat!.id) })
     case "finchtop": return ctx.reply(finchTopText(), { reply_markup: backToMenuKb(ctx.chat!.id) })
     case "noop": return
