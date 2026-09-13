@@ -2,210 +2,173 @@
 
 **Finch snitches on where your tokens really came from.**
 
-A wallet-provenance and launchpad-activity service for Robinhood Chain — built for
-ETHGlobal Online 2026, targeting **The Graph** (Best AI Tooling/Use Case),
-**Uniswap Foundation** (Best Uniswap Stack Contribution), and **Bazantic**
-(Agentify a New API).
+A Telegram bot (`@FinchRH_bot`) backed by a Substreams pipeline that indexes
+[Pons](https://pons.fun) launchpad activity and wallet transfers on **Robinhood
+Chain** (`eip155:4663`, RPC `https://rpc.mainnet.chain.robinhood.com`). Finch
+answers natural-language questions about a wallet's activity and new token
+launches — factual, read-only, no trading logic. The same query API is
+registered as a metered [Bazantic](https://bazantic.com) gateway (x402/MPP);
+Finch is a **peer**, not a gatekeeper — other agents call it directly, the
+Telegram bot is just one consumer of the same backend.
+
+Built for ETHOnline 2026, Uniswap Foundation track — hackathon feedback
+submitted in [`FEEDBACK.md`](FEEDBACK.md).
 
 ## What Finch does
 
-Finch traces where an unexpected token transfer on Robinhood Chain actually came
-from. The motivating case: a wallet receives a stock token (e.g. NVDA) with no
-direct swap, no claim of its own, no obvious cause — Finch explains the real
-mechanism: Pons launchpad trading fees, settled through a fee-escrow/distributor
-pipeline, paid out in a stock token unrelated to whatever generated the fee.
+On Robinhood Chain, wallets receive tokenized stocks — NVDA, COST, GLD — they
+never bought. Here's how it happens: someone launches a memecoin on Pons; it
+graduates to a Uniswap V4 pool paired against a stock; the creator's fee cut,
+paid in that stock, is redirected to a holder-fee distributor, which pays it
+out to holders. A wallet just sees "+0.09 NVDA from 0xe25e…" — no block
+explorer says which memecoin that came from, or why that wallet. Finch
+reconstructs the route:
 
-Finch surfaces this as:
+1. **Finds the transfer** — the most recent transfer of that token into the
+   wallet, from the Substreams-indexed Postgres store.
+2. **Resolves the payer** — if the sender is a contract, Finch reads it
+   on-chain (`token()`, `quoteToken()`) and cross-checks it against the
+   official `PonsHolderFeeManager` registry — it never infers what a contract
+   does just because a getter returns a value.
+3. **Confirms the path** — if `quoteToken()` matches the received asset, the
+   route is confirmed: creator-fee cut → Pons `FeeEscrow` → distributor → an
+   epoch batch that included the wallet. Finch reports the **route**, never a
+   per-holder distribution rate, and never who else is in the batch (that
+   selection is claim-gated and not on-chain-readable).
 
-- **The immediate event** — what happened, labeled plainly (not raw hex addresses)
-- **The recurring pattern** — is this a one-off or a standing entitlement
-- **Candidate tokens** — which Pons-launched tokens this wallet's history
-  correlates with, honestly hedged as correlational, not causal (see Limitations
-  below)
+Every response carries `confidence: "signal only - not a recommendation"`.
+Finch does no buy/sell signals, scoring, weighting, or ranking of any kind.
 
-## Why this uses Uniswap V4 — not just "reads some events"
+## Uniswap V4 integration — exact contracts and code
 
-Finch indexes Uniswap V4's `PoolManager` singleton (bytecode-verified against the
-canonical `IPoolManager` interface — all core selectors present), filtered to
-pools using Pons's custom **Meme Hook** — a genuine V4-specific integration (hooks
-are V4's defining architectural feature; this pattern doesn't exist in V2/V3).
-Finch captures `Initialize` / `Swap` / `ModifyLiquidity` for those pools.
+Robinhood Chain **Uniswap V4 `PoolManager`** (singleton):
+`0x8366a39CC670B4001A1121B8F6A443A643e40951`
 
-Where a token graduates, its pool *is* a V4 Meme-Hook pool. Fee payouts to holders
-flow `FeeEscrow → per-token distributor → holders`; Finch traces that route from
-its indexed data. The step Finch does **not** trace transaction-by-transaction is
-which specific swaps funded a given `FeeEscrow` balance — it reports the route and
-the mechanism, not a swap-level audit.
+Pons's **Meme Hook** (the hook every Pons-graduated pool is initialized with):
+`0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044`
 
-Exact integration points:
+V4 has no per-pool contract to watch — every pool multiplexes through the one
+`PoolManager`, so Finch decodes its `Initialize` event directly and filters to
+pools using Pons's hook:
 
-- **PoolManager address**: `0x8366a39CC670B4001A1121B8F6A443A643e40951`
-  — wired at `subgraph/subgraph.yaml:40-63`, referenced in `subgraph/src/constants.ts:8`
-- **Meme Hook address**: `0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044`
-  — `subgraph/src/constants.ts:5`; hook-filter guard at `subgraph/src/poolManager.ts:10`
-- **Initialize / Swap / ModifyLiquidity handlers**: `subgraph/src/poolManager.ts:9`,
-  `subgraph/src/poolManager.ts:36`, `subgraph/src/poolManager.ts:50`
-  (event bindings: `subgraph/subgraph.yaml:56-61`)
-- **Pairing-asset / pool-token derivation logic**: `subgraph/src/poolManager.ts:18-27`
-  (the launched token is the pool side that is *not* a known pairing asset);
-  `isPairingAsset` defined at `subgraph/src/constants.ts:46-51`
+- **Substreams decode + hook filter**:
+  [`substreams/src/lib.rs:99-110`](substreams/src/lib.rs#L99-L110) — matches
+  `PoolManager.Initialize`, discards anything not using the Meme Hook, and
+  records `currency0`/`currency1` (sorted by address, not "token vs. quote" —
+  the launched-token side is derived by checking against a known pairing-asset
+  set, not read directly off the event).
+- **On-chain PoolManager reference check**:
+  [`bot/src/distributor.ts:59`](bot/src/distributor.ts#L59) (`POOL_MANAGER`
+  constant) and [`bot/src/distributor.ts:82`](bot/src/distributor.ts#L82) —
+  reads a distributor's own logic bytecode and confirms it references the V4
+  `PoolManager`, rather than trusting an interface match.
+- **Route confirmation** (the actual payoff — chaining "which V4 pool" to "why
+  did this wallet get paid"):
+  [`bot/src/distributor.ts:135-176`](bot/src/distributor.ts#L135-L176)
+  (`resolveDistributors`) — reads `token()` / `quoteToken()` on the payer, and
+  cross-checks it against the official `PonsHolderFeeManager` registry on-chain
+  (`distributorOf(token) == payer`,
+  [`bot/src/distributor.ts:160`](bot/src/distributor.ts#L160)) rather than
+  inferring anything from a getter alone.
+
+## Why Substreams, not a subgraph
+
+Robinhood Chain isn't on The Graph's Subgraph Studio network. A Goldsky-hosted
+subgraph, or Goldsky-seeded data, does **not** satisfy a Graph-track
+requirement — confirmed directly with The Graph's dev-rel. The eligible path,
+and what Finch runs, is **pure Substreams consumed from a Graph provider**:
+StreamingFast's Robinhood endpoint, authenticated with a
+[thegraph.market](https://thegraph.market) Substreams token.
 
 ## Architecture
 
 ```
-                    -> Telegram bot (@FinchRH_bot)
-                    -> MCP server (finch_wallet_provenance, finch_pons_activity, finch_health)
-Two subgraphs   ---|
-(see below)         -> HTTP API (/query, /health, /calls, /SKILL.md)
-                    -> Bazantic x402/MPP Gateway (metered, wraps /query)
+substreams/  --sink postgres-->  Postgres (Aiven)  <--query-- bot/src/db.ts
+ (map_bot module,                                                  |
+  StreamingFast endpoint)                     +----------------------------+
+                                               |                            |
+                                     Telegram bot (@FinchRH_bot)     HTTP API (/query /ens
+                                     - button UI + typed commands     /health /calls /SKILL.md)
+                                     - live agent-call feed                 |
+                                                                   Bazantic x402/MPP gateway
+                                                                   (metered, wraps /query, /ens)
+                                                                             |
+                                                                     MCP stdio server
 ```
 
-Finch is a **peer, not a gatekeeper**: the Telegram bot, MCP server, direct HTTP
-calls, and the Bazantic gateway are independent consumers of the identical
-backend. No consumer is privileged over another.
+Pons lifecycle indexed end to end: launch (`TokenLaunched`) → curve trading →
+graduation (`LaunchSwept` / `GraduationTokensPermanentlyLocked` /
+`PoolGraduated`) → the post-graduation Uniswap V4 pool behind the Meme Hook.
+The fee settlement itself is inside Multicall3 batches (`aggregate3` /
+`tryAggregate`), not top-level `Transfer` events — the Substreams module
+decodes these directly.
 
-### Two subgraphs, split by freshness need
+The sink doesn't hold full chain history (1 GB free-tier Postgres) — it starts
+~150k blocks back and prunes pool-swap/liquidity tables hourly, keeping
+transfers to a rolling window. Live data only; there is no synthetic or mocked
+dataset anywhere in this project.
 
-- **`finch-live`** — narrow recent window, `fresh: true`, near-zero lag. Serves
-  time-sensitive queries: recent launches, just-landed payouts,
-  graduation-just-now.
-- **`finch-rpc` (history)** — deep index from Robinhood Chain's mainnet launch
-  block, serves provenance/recurring-pattern/candidate-token queries.
-  Backward-looking by nature, so lag (currently ~2.35M blocks / ~2 days, closing
-  on its own) doesn't degrade the answers it serves.
+**Deployed as a live, always-on service.** The Telegram bot and HTTP API run
+as systemd-managed services on an AWS box, behind Caddy for TLS.
 
-`/health` reports both freshness states honestly and separately — an agent
-calling Finch is never guessing which half of an answer is current versus
-historical.
+## Bazantic integration
 
-### Why Goldsky/Pinax, not Subgraph Studio directly
-
-Robinhood Chain (`eip155:4663`) is not yet in Subgraph Studio's supported
-networks — confirmed directly against The Graph's own networks registry (empty
-`subgraphs` list for this chain). This is not unusual: Solana went through the
-identical pattern (Substreams support well ahead of native Subgraph Studio
-integration). Finch's subgraphs run on Goldsky (Graph-protocol-compatible,
-standard GraphQL schema/query language) as the pragmatic path given this
-constraint. Migrating to native Subgraph Studio support, whenever The Graph adds
-this chain, is a one-line config change (swap the `network:` field) — the mapping
-code was deliberately kept provider-agnostic throughout.
-
-### Substreams (Track B) — built, partially blocked, documented honestly
-
-A parameterized Rust Substreams module (`/substreams`) is built, compiles clean,
-and is verified against live Pinax data for the canonical demo transaction. All
-filter addresses (factory, hook, fee escrow, distributor, token watch list) are
-module parameters, not hardcoded constants — built this way specifically to be
-reusable/composable, not a one-off connection.
-
-**What's blocked**: the final sink step (`graph_out` → a queryable Subgraph)
-requires either self-hosted `graph-node` or Pinax-hosted serving — Goldsky does
-not support sinking Substreams-powered subgraphs. This piece is incomplete. The
-plain RPC-based subgraphs (`finch-live` / history) carry the live product; the
-Substreams module stands as verified, reusable infrastructure not yet wired to a
-public query endpoint.
-
-### Live data, not mocked
-
-Both subgraphs consume real Robinhood Chain state via Goldsky, sourced from the
-chain's public RPC (`rpc.mainnet.chain.robinhood.com`). No synthetic or static
-datasets are used anywhere in this project.
-
-## Canonical example
-
-Wallet `0x2a58fb44f78d7b600aec945ba8cb253896793ed3` — a public, non-personal
-address — received NVDA as 1 of 105 recipients in a single Multicall3 batch
-transaction
-(`0xaa0ff1fb2008f24742ab131e86505c2565a721db499227b2b1a7617797cc3848`), paid out
-by a per-token Pons fee distributor (`0xe25e9bc31d24bb652fb6e2e466d7c9c89701173e`).
-Reading that contract on-chain: `token()` = microduck, `quoteToken()` = NVDA,
-`escrow()` = Pons's `FeeEscrow` (`0xd3AFEB2a57f70eF218Aa82451c51B2fb0416Ac9e`). The
-wallet holds ~150,564 microduck and is not on the distributor's exclude list — so
-this is its share of microduck's accrued Pons trading fees, paid in NVDA. It has
-received NVDA from this distributor more than once — a recurring entitlement, not
-a one-off. (microduck's pool is a graduated Uniswap V4 Meme-Hook pool; Finch does
-not trace which individual swaps funded this specific payout.)
-
-## Limitations — stated honestly, not hidden
-
-- **Candidate-token correlation is not causation.** Finch surfaces tokens a
-  wallet has traded that happen to have pools paired against a given stock token.
-  Statistical testing (base-rate comparison against ~50 tokens in a wallet's
-  typical history and a ~3.6% NVDA-pairing rate across all Pons pools) shows this
-  level of overlap occurs by chance alone in similar magnitude to what's observed
-  for tested wallets. Finch reports these as "could be," never "because of."
-- **The candidate-list feature works live only for indexed wallets with cached
-  full-history scans** (the canonical demo wallet). For an arbitrary wallet,
-  Finch currently only sees transfers among its explicit 14-token watch list
-  (`subgraph/src/constants.ts:16-30`), not arbitrary Pons-launched tokens — full
-  generalization requires either a dynamic per-launch data-source template or the
-  Substreams-powered full-token-scan path (see Track B above).
-- **Why a specific wallet is on Pons's payout list cannot be determined from
-  swap, LP, or launch activity** in the indexed data — it is most likely a
-  designated fee-recipient/treasury address maintained directly by Pons, not
-  something derivable from on-chain behavior signals alone.
-
-## Setup / run
-
-Requires Node 22.x. Copy `.env.example` to `.env` and fill in:
-
-- `RPC_URL` — `https://rpc.mainnet.chain.robinhood.com` (default is fine)
-- `SUBGRAPH_QUERY_URL` — deployed history subgraph GraphQL endpoint
-- `SUBGRAPH_LIVE_URL` — deployed fresh-window subgraph GraphQL endpoint
-- `OPENROUTER_API_KEY` — optional; only used to rephrase non-canonical prose answers
-- `TELEGRAM_BOT_TOKEN` — from @BotFather; only needed to run the Telegram bot
-- `FINCH_HTTP_PORT` — HTTP API port (default `8787`)
-
-**Subgraph** (from `subgraph/`, and identically from `subgraph-live/` with its
-own start block):
-
-```bash
-npm install
-npm run codegen
-npm run build
-npx goldsky subgraph deploy finch-rpc/0.4.0 --path .     # history
-# in subgraph-live/:  npx goldsky subgraph deploy finch-live/0.1.0 --path .
-```
-
-**Bot + API** (from `bot/`):
-
-```bash
-npm install
-npm start          # Telegram bot (long-polling)
-npm run serve      # HTTP API on FINCH_HTTP_PORT
-npm run mcp        # MCP stdio server
-npm run testagent  # consuming-agent smoke test against a running API
-```
-
-The Telegram bot and HTTP API are independent processes over the same
-`answer()` / `answerJson()` backend.
-
-**Single-box deploy**: `deploy/` contains systemd units + a Caddy config +
-`setup.sh` (see `bot/DOC_deploy.md`). **Bazantic gateway**: see
-`bazantic/DOC_recipe.md`.
+Finch's HTTP API is registered as a Bazantic gateway (x402/MPP, metered on
+Base). Any agent can discover and pay-per-call through Bazantic with no Finch
+API key, or call the same endpoint directly. Finch also verifies its own
+settlements on-chain (`GET /x402/verify?tx=…`), since Bazantic doesn't forward
+payment details upstream. A published Bazantic **Recipe**
+(`FINCH_GRAPH_ENS`) chains two of Finch's own paid tools — wallet provenance
+→ ENS name resolution — as one LLM-orchestrated call.
 
 ## Repo structure
 
 ```
-/subgraph       - The Graph subgraph — deep history index (Goldsky, finch-rpc)
-                    schema.graphql, subgraph.yaml, src/ (AssemblyScript mappings)
-/subgraph-live  - same mappings, later start block — fresh recent window (finch-live)
-/substreams     - Track B: parameterized Rust Substreams module (Pinax source), sink open
-/bot            - Telegram bot (@FinchRH_bot) + NLI backend + HTTP API + MCP server
-                    src/answer.ts    - answer() prose / answerJson() structured
-                    src/extract.ts   - regex-first NL intent/value extraction
-                    src/query.ts     - two-subgraph routing (live-first, history fallback)
-                    src/format.ts    - canonical prose answers
-                    src/serialize.ts - locked JSON response shape
-                    src/http.ts      - HTTP API (/query /health /calls /SKILL.md /spec)
-                    src/mcp.ts       - MCP stdio server
-                    src/calllog.ts   - per-caller agent-call log + visibility toggles
-                    src/freshness.ts - subgraph-head vs chain-head staleness gate
-/bazantic       - openapi.json (gateway spec) + DOC_recipe.md
-/deploy         - systemd units, Caddyfile, setup.sh, env template
-SKILL.md        - machine-readable agent manifest, also served at /SKILL.md
+/substreams  - Substreams module + finch.proto (published finch-substreams@v0.1.1)
+/bot         - Telegram bot + NLI backend + HTTP API (independent processes)
+  src/index.ts     - Telegram bot (grammy) — button menu + typed commands
+  src/http.ts      - HTTP API: /query /ens /health /calls /x402/verify /SKILL.md
+  src/db.ts        - pg pool + sql() helper against the sink Postgres
+  src/answer.ts    - answer() prose / answerJson() structured
+  src/ens.ts       - reverse 0x -> .eth via The Graph's canonical ENS subgraph
+  src/x402.ts      - reads Finch's own Bazantic settlements off Base
+  src/bazrecipe.ts - runs the published Bazantic Recipe FINCH_GRAPH_ENS
+  src/mcp.ts       - MCP stdio server
+/bazantic    - gateway.json (x402/MPP config) + DOC_recipe.md
+/recipes     - ens-enrich.mjs: standalone chained-MCP demo (no Bazantic)
+SKILL.md     - machine-readable manifest, also served at /SKILL.md
+DOC_build.md - current build state, changelog, run/deploy/demo commands
 ```
+
+## Run
+
+Requires Node 22.x. Copy `.env.example` to `.env` and fill in `DATABASE_URL`
+(the Substreams sink's Postgres), `TELEGRAM_BOT_TOKEN`, `GRAPH_QUERY_KEY` (ENS
+subgraph), and `SUBSTREAMS_API_TOKEN` if you're running the sink yourself.
+
+```bash
+cd bot && npm install
+npm start          # Telegram bot (long-polling)
+npm run serve      # HTTP API, port FINCH_HTTP_PORT (default 8787)
+npm run mcp        # MCP stdio server
+npx tsc --noEmit   # typecheck
+```
+
+See `DOC_build.md` for the full run/deploy/demo command reference, and
+`bazantic/DOC_recipe.md` for the Bazantic gateway + Recipe setup.
+
+## Limitations — stated honestly, not hidden
+
+- Finch indexes transfers of a fixed 15-token watch list (see `/finchTop`); a
+  payout in any other asset isn't seen.
+- Why a specific wallet, and not another holder, is in an epoch's batch is
+  off-chain and claim-gated — not derivable from indexed on-chain data.
+- Recurrence counts are within Finch's indexed range only; earlier receipts
+  may exist before it.
+- A project funding payouts by buying the asset with its own treasury, with no
+  pool ever pairing it against that asset, is invisible to this method.
+- Non-Pons launchpads are not yet indexed.
 
 ## License
 
-MIT
+[GNU Affero General Public License v3.0](LICENSE).

@@ -143,7 +143,7 @@ async function menuText(chatId: number): Promise<string> {
     idx = `${f.fresh ? "🟢 fresh" : "🟡 catching up"} · lag ${Math.round(f.lag_seconds / 60)}m`
   } catch { idx = "🔴 unavailable" }
   return [
-    "🐦 <b>FINCH</b>",
+    "🐦 <b>FINCH | Token Provenance on RH</b>",
     "Traces where tokenized stock tokens really came from — a Pons launch → its Uniswap V4 route — on Robinhood Chain.",
     "",
     `👛 Wallet: <b>${w ?? "Not connected"}</b>`,
@@ -627,6 +627,7 @@ bot.on("callback_query:data", async (ctx) => {
 bot.catch((err) => console.error("bot error:", err))
 
 const MENU = [
+  { command: "start", description: "Open the Finch menu" },
   { command: "newversion", description: "What changed in the new button UI" },
   { command: "process", description: "How Finch answers “why did I get this token?”" },
   { command: "foragents", description: "HTTP API / MCP / Bazantic access" },
